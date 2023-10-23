@@ -12,6 +12,6 @@ Perfect hashing is a special hash function that ensures a collision-free mapping
 
 * `testbed` contains codes of CuckooDuo and the related algorithms implemented in our testbed (built with two servers and one programmalbe swtich connected through RDMA networks).
 
-* `workload` contains several small sample workloads, which can be directly used to run the codes in this project. We also provide a script to download all workloads used in our paper. All links and materials preserve anonymity.
+* `workload` contains several small sample workloads, which can be directly used to run the codes in this project. We also upload all workloads used in our paper to Google Drive and provide [link](https://drive.google.com/file/d/1Y2WI6RYiPiWq6lNlhOusQbZMW1n89sBC/view?usp=share_link) to download them. All links and materials preserve anonymity.
 
 * More details can be found in the folders.
