@@ -16,10 +16,7 @@ We implement and test CuckooDuo on a CPU platform. We compare CuckooDuo with thr
 
 ## Datasets
 
-Datasets used in CPU experiments can be downloaded from the links below. After downloading, modify the corresponding configuration in `main.cpp` line 17.
-
-*links*
-
+Datasets used in CPU experiments can be find or downloaded as described in `workload/`. After getting data files, modify the corresponding configuration in `main.cpp` line 17.
 
 ## How to run
 
