@@ -39,7 +39,7 @@ void writeCSV(const string& filename) {
 }
 
 int main(int argc, char **argv) {
-	string load_path = "ycsb_files/load.txt";
+	string load_path = "load.txt";
 
 	read_ycsb_load(load_path);
 
