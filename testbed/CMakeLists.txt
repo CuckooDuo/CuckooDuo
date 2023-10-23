@@ -36,4 +36,5 @@ add_executable(rdma_server ${RDMA_SOURCE_DIR}/rdma_common.cpp ${RDMA_SOURCE_DIR}
 add_executable(test_expand ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_expand.cpp)
 add_executable(test_latency ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_latency.cpp)
 add_executable(test_multi ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_multi.cpp)
-add_executable(test_hybrid ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_hybrid.cpp)
+add_executable(test_hybrid_single ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_hybrid_single.cpp)
+add_executable(test_hybrid_multi ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_hybrid_multi.cpp)
