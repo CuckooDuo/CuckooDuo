@@ -6,7 +6,13 @@ We use YCSB [[1]](#md-ref-1) workloads to conduct experiments. We use the defaul
 
 All the YCSB workloads used in our paper can be found in the following [link](???). 
 
-In this folder, we also provide 19 small sample workloads (1 for insert requests, other 18 are paired for hybrid workloads) with suffix `-64K`, which contains 64K requests. These small workloads can be directly used to run the codes in this project by modfying file path in cpp files. 
+In this folder, we also provide 19 small sample workloads containing 64K requests with suffix `-64K`. These small workloads can be directly used to run the codes in this project by modfying file path in cpp files.
+
+- `load-64K.txt` contains 64K insert requests, which can be used to conduct most experiments in our paper. 
+
+- `load_xx-64K.txt` and `run_xx-64K.txt` contain 6.4K (10%) insert requests and 57.6K (90%) hybrid requests with different insert/query ratios respectively, which can be used to run the experiments on hybrid workloads (Figure 11).
+
+Note that when using small workloads, we should reduce the stash size of TEA to acquire similar speed results in our paper.
 
 ## References
 
