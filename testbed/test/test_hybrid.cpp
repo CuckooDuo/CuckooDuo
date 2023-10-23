@@ -219,11 +219,11 @@ int main(int argc, char **argv) {
 	int cell_number, sock;
 
 	string load_path;
-	string load_prefix = "ycsb_files/load_";
+	string load_prefix = "load_";
 	string load_suffix = ".txt";
 
 	string run_path;
-	string run_prefix = "ycsb_files/run_";
+	string run_prefix = "run_";
 	string run_suffix = ".txt";
 
 	string csv_path = "hybrid.csv";
