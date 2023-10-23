@@ -360,7 +360,7 @@ void test_tea(int i, int cell_number) {
 }
 
 int main(int argc, char **argv) {
-	string load_path = "ycsb_files/load.txt";
+	string load_path = "load.txt";
 
 	read_ycsb_load(load_path);
 	/* You can use this to get a minor partial dataset */
