@@ -22,7 +22,7 @@ Datasets used in CPU experiments can be find or downloaded as described in `work
 
 ### Build
 
-First, download the datasets from the above links. Modify `inputFilePath` in `main.cpp` line 17 to specify which dataset to be used.
+First, get the datasets like described above. Modify `inputFilePath` in `main.cpp` line 17 to specify which dataset to be used.
 
 Then, compile the main.cpp with the following command. 
 
