@@ -103,21 +103,21 @@ The results will stored in csv files described by `csv_path` in corresponding cp
 
 You can also get more details of each test in corresponding cpp files, and modify test by yourself.
 
-* Comparison of average latency with prior art (Figure 9(a~d))
+* Comparison of average latency with prior art (Figure 8(a~d))
 ```bash
 server@: ./bin/rdma_server -a remote_IP
 
 client@: ./bin/test_latency -a remote_IP
 ```
 
-*  Comparison of average throughput with prior art. (Figure 10(a~d))
+*  Comparison of average throughput with prior art. (Figure 9(a~d))
 ```bash
 server@: ./bin/rdma_server -a remote_IP -n 16
 
 client@: ./bin/test_multi -a remote_IP -n 16
 ```
 
-* Comparison of speed on hybrid workloads (Figure 12(b))
+* Comparison of speed on hybrid workloads (Figure 11(b))
 ```bash
 server@: ./bin/rdma_server -a remote_IP -n 16
 
