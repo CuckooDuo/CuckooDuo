@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
 	string run_prefix = "run_";
 	string run_suffix = ".txt";
 
-	string csv_path = "hybrid.csv";
+	string csv_path = "hybrid_multi.csv";
 
 	/* Test throughput with 16 threads on different hybrid wordloads
 	 * Insertion/Query changes from 90/10 to 10/90
