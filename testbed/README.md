@@ -24,7 +24,8 @@ We also implement the other three algorithms in our testbed: MapEmbed, RACE, and
 ### test:
 * `test_latency.cpp`: Test program for latency at different load factor
 * `test_multi.cpp`: Test program for throughput with different thread number
-* `test_hybrid.cpp`: Test program for hybrid workloads
+* `test_hybrid_single.cpp`: Test program for latency on hybrid workloads with single thread
+* `test_hybrid_multi.cpp`: Test program for throughput on hybrid workloads with multiple thread
 * `test_expand.cpp`: Test program for expansion
 
 ### ycsb_header: 
@@ -114,11 +115,18 @@ server@: ./bin/rdma_server -a remote_IP -n 16
 client@: ./bin/test_multi -a remote_IP -n 16
 ```
 
+* Comparison of speed on hybrid workloads (Figure 11(a))
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_hybrid_single -a remote_IP
+```
+
 * Comparison of speed on hybrid workloads (Figure 11(b))
 ```bash
 server@: ./bin/rdma_server -a remote_IP -n 16
 
-client@: ./bin/test_hybrid -a remote_IP -n 16
+client@: ./bin/test_hybrid_multi -a remote_IP -n 16
 ```
 
 *  Performance of dynamic expansion (Figure 12(b))
