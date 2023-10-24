@@ -49,7 +49,6 @@ void *tcp_thread(void *args) {
       }
       else if (strmsg == "over") {
         // Close rdma server
-        rdma_server_close();
         break;
       }
     }
@@ -65,6 +64,7 @@ void *tcp_thread(void *args) {
 
   close(client);
   close(sock);
+  rdma_server_close();
 
   exit(0);
 }
