@@ -351,7 +351,7 @@ int main(int argc, char **argv) {
 
 	read_ycsb_load(load_path);
 	/* You can use this to get a minor partial dataset */
-	entry.erase(entry.begin()+1000000, entry.end());
+	//entry.erase(entry.begin()+1000000, entry.end());
 
 	int cell_number = entry.size();
 	if (rdma_client_init(argc, argv, cell_number) < 0)
