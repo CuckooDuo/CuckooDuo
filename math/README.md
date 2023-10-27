@@ -21,7 +21,7 @@ This folder contains the codes for validating the theoretical results in our pap
 
 ## Datasets
 
-Datasets used in CPU experiments can be find or downloaded as described in `workload/`. After downloading, modify the corresponding configuration in `main.cpp` line 17.
+Datasets used in CPU experiments can be found or downloaded as described in `workload/`. After downloading, modify the corresponding configuration in `main.cpp` line 17.
 
 ## How to run
 
