@@ -14,7 +14,6 @@
 #include <bitset>
 #pragma once
 
-namespace SCK {
 /* entry parameters */
 #define KEY_LEN 8
 #define VAL_LEN 8
@@ -24,12 +23,12 @@ struct Entry{
     char val[VAL_LEN];
 };
 Entry emptyEntry;
-// Entry RDMAmap[2][1876000][8];
+Entry RDMAmap[2][1876000][16];
 
 /* table parameters */
-#define N MY_BUCKET_SIZE    // item(cell) number in a bucket
-#define SIG_LEN 2           // sig(fingerprint) length: 16 bit
-#define TCAM_SIZE 3500      // size of TCAM
+#define N 8                 // item(cell) number in a bucket
+#define SIG_LEN 4           // sig(fingerprint) length: 16 bit
+#define TCAM_SIZE 10000000000      // size of TCAM
 #define TABLE1 0            // index of table1
 #define TABLE2 1            // index of table2
 
@@ -46,11 +45,6 @@ struct Table
 
 class CuckooHashTable{
 public:
-
-    int move_num, max_move_num, sum_move_num; 
-    int RDMA_read_num, max_RDMA_read_num, sum_RDMA_read_num; 
-    int RDMA_read_num2, max_RDMA_read_num2, sum_RDMA_read_num2; 
-
     int bucket_number;
     int max_kick_number;
     Table table[2];
@@ -71,12 +65,17 @@ public:
     uint32_t seed_hash_to_alt;
 
     //test data
-    int kick_num; //插入一个key时，如果需要kick则加1，kick时再需要kick不会加1
+    int kick_num; 
     int kick_success_num;
     int collision_num;
     int fullbucket_num;
     int tcam_num;
+    int move_num; 
     uint32_t *kick_stat;
+
+    int tcam_coll_num;
+    int tcam_bfs_num;
+    int emptyNum;
 
     // std::unordered_map<indexType, Entry, pair_hash> RDMAmap;  // simulate RDMA
     // Entry ***RDMAmap;
@@ -85,18 +84,14 @@ public:
     // simulate RDMA, write entry at (table,bucket,cell)
     inline void RDMA_write(int table, int bucket, int cell, Entry entry){
         // RDMAmap[std::make_pair(std::make_pair(table, bucket), cell)] = entry;
-        // memcpy(RDMAmap[table][bucket][cell].key, entry.key, KEY_LEN*sizeof(char));
-        // memcpy(RDMAmap[table][bucket][cell].val, entry.val, VAL_LEN*sizeof(char));
+        memcpy(RDMAmap[table][bucket][cell].key, entry.key, KEY_LEN*sizeof(char));
+        memcpy(RDMAmap[table][bucket][cell].val, entry.val, VAL_LEN*sizeof(char));
         // memcpy(RDMAmap[table][bucket][cell], entry, sizeof(entry));
-        ++move_num;
     }
 
     // simulate RDMA, read entry from (table,bucket,cell)
     inline Entry RDMA_read(int table, int bucket, int cell){
-        // return RDMAmap[table][bucket][cell];
-        ++RDMA_read_num;
-        ++RDMA_read_num2;
-        return emptyEntry;
+        return RDMAmap[table][bucket][cell];
     }
 
 private:
@@ -118,8 +113,16 @@ private:
         seed_hash_to_alt = seed;
     }
 
+    int chars2int(const char *key){
+        int k;
+        char *s = (char *)&k;
+        memcpy(s, key, sizeof(int));
+        return k;
+    }
+
     int calculate_fp(const char *key) {
-        return MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp) % (1 << (SIG_LEN * 8));
+        // return MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp) % (1 << (SIG_LEN * 8));
+        return chars2int(key);
     }
 
     // return hash of sig(fp), used for alternate index.
@@ -197,16 +200,21 @@ private:
         }
     }
 public:
+    double calc_empty_bucket_ratio(){
+        return (double)emptyNum/(bucket_number*2);
+        /*
+        int x = 0;
+        int y = 0;
+        for (int i=0; i<bucket_number; i++){
+            y += 2;
+            if (table[TABLE1].cell[i] != N) ++x;
+            if (table[TABLE2].cell[i] != N) ++x;
+        }
+        return (double)x/y;
+        */
+    }
+
     bool insert(const Entry& entry) {
-        max_move_num = std::max(max_move_num, move_num);
-        sum_move_num += move_num;
-        max_RDMA_read_num = std::max(max_RDMA_read_num, RDMA_read_num);
-        sum_RDMA_read_num += RDMA_read_num;
-        max_RDMA_read_num2 = std::max(max_RDMA_read_num2, RDMA_read_num2);
-        sum_RDMA_read_num2 += RDMA_read_num2;
-        move_num = 0;
-        RDMA_read_num = 0;
-        RDMA_read_num2 = 0;
         int fp = calculate_fp(entry.key);
         int h[2];
         h[TABLE1] = hash1(entry.key);
@@ -216,6 +224,7 @@ public:
 
         if(check_in_table1(h[TABLE1], sig) != -1 || check_in_table2(h[TABLE2], sig) != -1) { //collision happen
             collision_num++;
+            tcam_coll_num++;
             if(insert_to_cam(entry)) 
                 return true;
             return false;
@@ -228,7 +237,10 @@ public:
             table[TABLE1].bucket[h[TABLE1]].full[table[TABLE1].cell[h[TABLE1]]] = true;
             table[TABLE1].cell[h[TABLE1]]++;
             
-            if(table[TABLE1].cell[h[TABLE1]] == N)  fullbucket_num++;
+            if(table[TABLE1].cell[h[TABLE1]] == N){
+                fullbucket_num++;
+                emptyNum--;
+            }  
             return true;
         }
         else if(table[TABLE2].cell[h[TABLE2]] < N) {  //insert sig into table 2
@@ -238,7 +250,10 @@ public:
             table[TABLE2].bucket[h[TABLE2]].full[table[TABLE2].cell[h[TABLE2]]] = true;
             table[TABLE2].cell[h[TABLE2]]++;
             
-            if(table[TABLE2].cell[h[TABLE2]] == N)  fullbucket_num++;
+            if(table[TABLE2].cell[h[TABLE2]] == N){
+                fullbucket_num++;
+                emptyNum--;
+            }
             return true;
         }
         else if(max_kick_number > 0) {  //kick
@@ -267,6 +282,10 @@ public:
                                 //table status
                                 table[1-i].bucket[alt_idx].full[k] = true;
                                 table[1-i].cell[alt_idx]++;
+                                if(table[1-i].cell[alt_idx] == N){
+                                    fullbucket_num++;
+                                    emptyNum--;
+                                }
                                 kick_clear();
 
                                 move_num += 1;
@@ -289,6 +308,7 @@ public:
             if(max_kick_number <= 1) { //max kick number reached
                 kick_clear();
                 //insert to cam
+                tcam_bfs_num++;
                 if(insert_to_cam(entry))
                     return true;
                 return false;
@@ -303,6 +323,7 @@ public:
                 if(tmp_stack.size() >= max_kick_number) {
                     kick_clear();
                     //insert to cam
+                    tcam_bfs_num++;
                     if(insert_to_cam(entry))
                         return true;
                     return false;
@@ -361,6 +382,10 @@ public:
                                 //table status
                                 table[1-table_now].bucket[alt_idx].full[k] = true;
                                 table[1-table_now].cell[alt_idx]++;
+                                if(table[1-table_now].cell[alt_idx] == N){
+                                    fullbucket_num++;
+                                    emptyNum--;
+                                }
                                 kick_clear(); //clear the queue and the stack
 
                                 move_num += tmp_stack_size+1;
@@ -527,7 +552,7 @@ public:
         //         memset(this->RDMAmap[i][j], 0, N*sizeof(Entry));
         //     }
         // }
-        // memset(RDMAmap, 0, sizeof(RDMAmap));
+        memset(RDMAmap, 0, sizeof(RDMAmap));
 
         collision_num = 0;
         kick_num = 0;
@@ -535,12 +560,9 @@ public:
         tcam_num = 0;
         kick_success_num = 0;
         move_num = 0;
+        emptyNum = bucket_number*2;
         this->kick_stat = new uint32_t[max_kick_num+1];
         memset(kick_stat, 0, (max_kick_num+1)*sizeof(uint32_t));
-
-        move_num = max_move_num = sum_move_num = 0;
-        RDMA_read_num = max_RDMA_read_num = sum_RDMA_read_num = 0;
-        RDMA_read_num2 = max_RDMA_read_num2 = sum_RDMA_read_num2 = 0;
     }
 
     ~CuckooHashTable() {
@@ -550,5 +572,3 @@ public:
         delete [] table[TABLE2].bucket;
     }
 };
-
-}

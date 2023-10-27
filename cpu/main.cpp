@@ -6,6 +6,10 @@
 #include <map>
 #include <iomanip> // Include <iomanip> for setw
 
+#ifndef MY_BUCKET_SIZE
+#define MY_BUCKET_SIZE 8
+#endif
+
 #include "CuckooDuo.h"
 #include "MapEmbed.h"
 #include "tea.h"
@@ -229,33 +233,6 @@ void test_all(int insert_number = TEST_SLOTS){
         race.sum_RDMA_read_num2 = 0;
         race.max_RDMA_read_num2 = 0;
     }
-    cout << "race : \nquery : ";
-    race.sum_move_num = race.sum_RDMA_read_num = race.sum_RDMA_read_num2 = 0;
-    for (int j = 0; j < i; j++){
-        race.query(entry[j].key);
-    }
-    cout << (double)race.sum_move_num/i << "," 
-        << (double)race.sum_RDMA_read_num/i << "," 
-        << (double)race.sum_RDMA_read_num2/i << "," << "\n";
-    cout << "update : ";
-    race.sum_move_num = race.sum_RDMA_read_num = race.sum_RDMA_read_num2 = 0;
-    for (int j = 0; j < i; j++){
-        RACE::Entry insertEntry;
-        memcpy(insertEntry.key, entry[j].key, 8*sizeof(char));
-        memcpy(insertEntry.val, entry[j].val, 8*sizeof(char));
-        race.update(insertEntry);
-    }
-    cout << (double)race.sum_move_num/i << "," 
-        << (double)race.sum_RDMA_read_num/i << "," 
-        << (double)race.sum_RDMA_read_num2/i << "," << "\n";
-    cout << "delete : ";
-    race.sum_move_num = race.sum_RDMA_read_num = race.sum_RDMA_read_num2 = 0;
-    for (int j = 0; j < i; j++){
-        race.deletion(entry[j].key);
-    }
-    cout << (double)race.sum_move_num/i << "," 
-        << (double)race.sum_RDMA_read_num/i << "," 
-        << (double)race.sum_RDMA_read_num2/i << "," << "\n";
     LF[2] += (double)i/insert_number;
 // /******************************* create TEA ********************************/
     fails = 0;
@@ -349,18 +326,18 @@ int main(int argc, char *argv[])
     int test_round = 6;
     for (int i = 1; i<=test_round; i++)
     {
-        cout << "iteration: " << i << endl;
+        // cout << "iteration: " << i << endl;
         // normal_test(TEST_SLOTS/6 * i);
         test_all(TEST_SLOTS);
     }
-    cout<<"SIG_LEN: "<<(SIG_LEN*8)<<endl;
-    cout << "cuckoo,\tMapEmbed,\tRACE,\tTEA,\tcuckoo_SingleHash\n";
+    // cout<<"SIG_LEN: "<<(SIG_LEN*8)<<endl;
+    // cout << "cuckoo,\tMapEmbed,\tRACE,\tTEA,\tcuckoo_SingleHash\n";
     for (int i=0; i<5; i++) LF[i] = LF[i] / test_round;
     for (int i=0; i<5; i++) cout << LF[i] << ",\t";
+    cout << endl;
     if(!strcmp(argv[argc - 1], "average_moved_items")){
         std::ofstream outputFile(testResultDir);
         outputFile << "load_factor,cuckoo,MapEmbed,RACE,TEA,cuckoo_SingleHash" << endl;
-        cout << endl;
         for (int i=0; i<LFstepSum; i++){
             outputFile << (i+1) << ",";
             for (int j=0; j<5; j++){
@@ -438,24 +415,5 @@ int main(int argc, char *argv[])
         }
         outputFile.close();
     }
-
-/*
-    //average stats
-    cout << endl;
-    double sum_load_factor = 0;
-    double sum_distribution[max_kick_num+1];
-    memset(sum_distribution, 0, sizeof(sum_distribution));
-    for(int i = 1; i <= test_times; i++) {
-        for(int j = 1; j <= max_kick_num; j++) {
-            sum_distribution[j] += distribution[i][j];
-        }
-        sum_load_factor += load_factor[i];
-    }
-    double avg = sum_load_factor / test_times;
-    cout << "average load factor: " << avg << endl;
-    for(int i = 1; i <= max_kick_num; i++) {
-        cout << "average distribution of kick " << i << " times : " << sum_distribution[i] / test_times << endl;
-    }
-*/
     return 0;
 }

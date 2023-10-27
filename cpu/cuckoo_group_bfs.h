@@ -14,7 +14,6 @@
 #include <bitset>
 #pragma once
 
-namespace SCK {
 /* entry parameters */
 #define KEY_LEN 8
 #define VAL_LEN 8
@@ -23,13 +22,12 @@ struct Entry{
     char key[KEY_LEN];
     char val[VAL_LEN];
 };
-Entry emptyEntry;
-// Entry RDMAmap[2][1876000][8];
 
 /* table parameters */
-#define N MY_BUCKET_SIZE    // item(cell) number in a bucket
+#define N 8                 // item(cell) number in a bucket
+#define L 8
 #define SIG_LEN 2           // sig(fingerprint) length: 16 bit
-#define TCAM_SIZE 3500      // size of TCAM
+#define TCAM_SIZE 100      // size of TCAM
 #define TABLE1 0            // index of table1
 #define TABLE2 1            // index of table2
 
@@ -46,11 +44,6 @@ struct Table
 
 class CuckooHashTable{
 public:
-
-    int move_num, max_move_num, sum_move_num; 
-    int RDMA_read_num, max_RDMA_read_num, sum_RDMA_read_num; 
-    int RDMA_read_num2, max_RDMA_read_num2, sum_RDMA_read_num2; 
-
     int bucket_number;
     int max_kick_number;
     Table table[2];
@@ -76,28 +69,8 @@ public:
     int collision_num;
     int fullbucket_num;
     int tcam_num;
+    int sum_move_num; //数据搬移量
     uint32_t *kick_stat;
-
-    // std::unordered_map<indexType, Entry, pair_hash> RDMAmap;  // simulate RDMA
-    // Entry ***RDMAmap;
-    // Entry RDMAmap[2][1876000][8];
-
-    // simulate RDMA, write entry at (table,bucket,cell)
-    inline void RDMA_write(int table, int bucket, int cell, Entry entry){
-        // RDMAmap[std::make_pair(std::make_pair(table, bucket), cell)] = entry;
-        // memcpy(RDMAmap[table][bucket][cell].key, entry.key, KEY_LEN*sizeof(char));
-        // memcpy(RDMAmap[table][bucket][cell].val, entry.val, VAL_LEN*sizeof(char));
-        // memcpy(RDMAmap[table][bucket][cell], entry, sizeof(entry));
-        ++move_num;
-    }
-
-    // simulate RDMA, read entry from (table,bucket,cell)
-    inline Entry RDMA_read(int table, int bucket, int cell){
-        // return RDMAmap[table][bucket][cell];
-        ++RDMA_read_num;
-        ++RDMA_read_num2;
-        return emptyEntry;
-    }
 
 private:
     void initialize_hash_functions(){
@@ -198,15 +171,6 @@ private:
     }
 public:
     bool insert(const Entry& entry) {
-        max_move_num = std::max(max_move_num, move_num);
-        sum_move_num += move_num;
-        max_RDMA_read_num = std::max(max_RDMA_read_num, RDMA_read_num);
-        sum_RDMA_read_num += RDMA_read_num;
-        max_RDMA_read_num2 = std::max(max_RDMA_read_num2, RDMA_read_num2);
-        sum_RDMA_read_num2 += RDMA_read_num2;
-        move_num = 0;
-        RDMA_read_num = 0;
-        RDMA_read_num2 = 0;
         int fp = calculate_fp(entry.key);
         int h[2];
         h[TABLE1] = hash1(entry.key);
@@ -224,7 +188,6 @@ public:
         if(table[TABLE1].cell[h[TABLE1]] < N && table[TABLE1].cell[h[TABLE1]] <= table[TABLE2].cell[h[TABLE2]]) {  //if h1 has more empty cell, insert sig into table 1
             memcpy(table[TABLE1].bucket[h[TABLE1]].sig[table[TABLE1].cell[h[TABLE1]]], sig, SIG_LEN*sizeof(char));
             /* RDMA write: Entry to table[TABLE1], bucket h1, cell table[TABLE1].cell[h1]*/
-            RDMA_write(TABLE1, h[TABLE1], table[TABLE1].cell[h[TABLE1]], emptyEntry);
             table[TABLE1].bucket[h[TABLE1]].full[table[TABLE1].cell[h[TABLE1]]] = true;
             table[TABLE1].cell[h[TABLE1]]++;
             
@@ -234,7 +197,6 @@ public:
         else if(table[TABLE2].cell[h[TABLE2]] < N) {  //insert sig into table 2
             memcpy(table[TABLE2].bucket[h[TABLE2]].sig[table[TABLE2].cell[h[TABLE2]]], sig, SIG_LEN*sizeof(char));
             /* RDMA write: Entry to table[TABLE2], bucket h2, cell i*/
-            RDMA_write(TABLE2, h[TABLE2], table[TABLE2].cell[h[TABLE2]], emptyEntry);
             table[TABLE2].bucket[h[TABLE2]].full[table[TABLE2].cell[h[TABLE2]]] = true;
             table[TABLE2].cell[h[TABLE2]]++;
             
@@ -259,17 +221,13 @@ public:
                                 memcpy(table[1-i].bucket[alt_idx].sig[k], table[i].bucket[h[i]].sig[j], SIG_LEN*sizeof(char));
                                 memcpy(table[i].bucket[h[i]].sig[j], sig, SIG_LEN*sizeof(char));
                                 /* RDMA move: twice */
-                                Entry entryInfo;
-                                entryInfo = RDMA_read(i, h[i], j);
-                                RDMA_write(1-i, alt_idx, k, entryInfo);
-                                RDMA_write(i, h[i], j, emptyEntry);// emptyEntry = sig
 
                                 //table status
                                 table[1-i].bucket[alt_idx].full[k] = true;
                                 table[1-i].cell[alt_idx]++;
                                 kick_clear();
 
-                                move_num += 1;
+                                sum_move_num += 1;
                                 return true;
                             }
                         }
@@ -327,18 +285,12 @@ public:
                                 //alt(now) to alt of alt(1-now)
                                 memcpy(table[1-table_now].bucket[alt_idx].sig[k], table[table_now].bucket[idx_now].sig[j], SIG_LEN*sizeof(char));
                                 /* RDMA move: now to 1-now */
-                                Entry entryInfo;
-                                entryInfo = RDMA_read(table_now, idx_now, j);
-                                RDMA_write(1-table_now, alt_idx, k, entryInfo);
 
                                 kick_params dst, src;
                                 src = tmp_kickparams;
                                 //move: stack top(src) to alt(now)
                                 memcpy(table[table_now].bucket[idx_now].sig[j], table[src.table].bucket[src.bucket].sig[src.cell], SIG_LEN*sizeof(char));
                                 /* RDMA move: src to now */
-                                // Entry entryInfo;
-                                entryInfo = RDMA_read(src.table, src.bucket, src.cell);
-                                RDMA_write(table_now, idx_now, j, entryInfo);
 
                                 //move in stack
                                 while(!tmp_stack.empty()) {
@@ -348,23 +300,19 @@ public:
                                     /* move table */
                                     memcpy(table[dst.table].bucket[dst.bucket].sig[dst.cell], table[src.table].bucket[src.bucket].sig[src.cell], SIG_LEN*sizeof(char));
                                     /* RDMA move: src to dst */
-                                    Entry entryInfo;
-                                    entryInfo = RDMA_read(src.table, src.bucket, src.cell);
-                                    RDMA_write(dst.table, dst.bucket, dst.cell, entryInfo);
                                 }
 
                                 /* the last move: move the entry into src(the actual dst, last params in the stack.)*/
                                 memcpy(table[src.table].bucket[src.bucket].sig[src.cell], sig, SIG_LEN*sizeof(char));
                                 /* RDMA move: Entry to src */
-                                RDMA_write(src.table, src.bucket, src.cell, emptyEntry);
 
                                 //table status
                                 table[1-table_now].bucket[alt_idx].full[k] = true;
                                 table[1-table_now].cell[alt_idx]++;
                                 kick_clear(); //clear the queue and the stack
 
-                                move_num += tmp_stack_size+1;
-                                //printf("--------------------------------------move_num--------------------------------------: %d \n", tmp_stack_size+1);
+                                sum_move_num += tmp_stack_size+1;
+                                //printf("--------------------------------------sum_move_num--------------------------------------: %d \n", tmp_stack_size+1);
                                 return true;
                             }
                         }
@@ -517,30 +465,14 @@ public:
 
         initialize_hash_functions();
 
-        // this->RDMAmap = new Entry[2][this->bucket_number][N];
-        // memset(RDMAmap, 0, (long long)2*this->bucket_number*N*sizeof(Entry));
-        // this->RDMAmap = new Entry**[2];
-        // for (int i=0; i<2; i++){
-        //     this->RDMAmap[i] = new Entry*[this->bucket_number];
-        //     for (int j=0; j<this->bucket_number; j++){
-        //         this->RDMAmap[i][j] = new Entry[N];
-        //         memset(this->RDMAmap[i][j], 0, N*sizeof(Entry));
-        //     }
-        // }
-        // memset(RDMAmap, 0, sizeof(RDMAmap));
-
         collision_num = 0;
         kick_num = 0;
         fullbucket_num = 0;
         tcam_num = 0;
         kick_success_num = 0;
-        move_num = 0;
+        sum_move_num = 0;
         this->kick_stat = new uint32_t[max_kick_num+1];
         memset(kick_stat, 0, (max_kick_num+1)*sizeof(uint32_t));
-
-        move_num = max_move_num = sum_move_num = 0;
-        RDMA_read_num = max_RDMA_read_num = sum_RDMA_read_num = 0;
-        RDMA_read_num2 = max_RDMA_read_num2 = sum_RDMA_read_num2 = 0;
     }
 
     ~CuckooHashTable() {
@@ -550,5 +482,3 @@ public:
         delete [] table[TABLE2].bucket;
     }
 };
-
-}

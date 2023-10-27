@@ -55,7 +55,7 @@ int cnt = 0; // debug use
 
 #define MAX_LAYER 12
 #define M 32                // max number of hash functions in each layer
-#define N 8                 // item number in a bucket
+#define N MY_BUCKET_SIZE    // item number in a bucket
 
 struct Bucket{
     char key[N][KEY_LEN];
@@ -80,9 +80,9 @@ public:
 
     int cell_offset[MAX_LAYER];     // used to calculate the unique ID of a cell, e.g. cell[l][k]'s ID is k+cell_offset[l]
 
-    int move_num, max_move_num, sum_move_num; //数据搬移量
-    int RDMA_read_num, max_RDMA_read_num, sum_RDMA_read_num; //片外访存次数
-    int RDMA_read_num2, max_RDMA_read_num2, sum_RDMA_read_num2; //片外访存数据总量
+    int move_num, max_move_num, sum_move_num; 
+    int RDMA_read_num, max_RDMA_read_num, sum_RDMA_read_num; 
+    int RDMA_read_num2, max_RDMA_read_num2, sum_RDMA_read_num2; 
 #ifdef USING_SIMD
     __attribute__((aligned(32))) Bucket *bucket;
 #else

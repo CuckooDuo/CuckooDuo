@@ -25,7 +25,7 @@ struct Entry{
 };
 
 /* table parameters */
-#define N 8                 // item(cell) number in a bucket
+#define N MY_BUCKET_SIZE    // item(cell) number in a bucket
 #define SIG_LEN 2           // sig(fingerprint) length: 16 bit
 #define TCAM_SIZE 64        // size of TCAM
 
@@ -56,9 +56,9 @@ public:
     int fullbucket_num;
     int tcam_num;
     
-    int move_num, max_move_num, sum_move_num; //数据搬移量
-    int RDMA_read_num, max_RDMA_read_num, sum_RDMA_read_num; //片外访存次数
-    int RDMA_read_num2, max_RDMA_read_num2, sum_RDMA_read_num2; //片外访存数据总量
+    int move_num, max_move_num, sum_move_num; 
+    int RDMA_read_num, max_RDMA_read_num, sum_RDMA_read_num; 
+    int RDMA_read_num2, max_RDMA_read_num2, sum_RDMA_read_num2; 
 
 private:
     void initialize_hash_functions(){

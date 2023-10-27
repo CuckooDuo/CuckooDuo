@@ -66,12 +66,12 @@ typedef std::pair<std::pair<int, int>, int> indexType;
 #define indexTypeNotFound std::make_pair(std::make_pair(-2, -2), -2)
 
 /* table parameters */
-#define N MY_BUCKET_SIZE                 // item(cell) number in a bucket (TABLE1)
-#define M (MY_BUCKET_SIZE*3/4)           // item(cell) number in a bucket using hash1 (N-M for hash2) (TABLE1)
-#define L MY_BUCKET_SIZE                 // item(cell) number in a bucket (TABLE2)
-#define maxNL MY_BUCKET_SIZE             // max(N, L)
-#define SIG_LEN 2           // sig(fingerprint) length: 16 bit
-#define TCAM_SIZE 100       // size of TCAM
+#define N 8                 // item(cell) number in a bucket (TABLE1)
+#define M 6                 // item(cell) number in a bucket using hash1 (N-M for hash2) (TABLE1)
+#define L 8                 // item(cell) number in a bucket (TABLE2)
+#define maxNL 8            // max(N, L)
+#define SIG_LEN 4           // sig(fingerprint) length: 16 bit
+#define TCAM_SIZE 100      // size of TCAM
 #define TABLE1 0            // index of table1
 #define TABLE2 1            // index of table2
 #define rebuildError -1
@@ -157,18 +157,18 @@ private:
     }
 
     int calculate_fp(const char *key, int fphash = 1) {
-        // return MurmurHash3_x86_32(key, KEY_LEN, fphash == 1 ? seed_hash_to_fp : seed_hash_to_fp2);// % (1 << (SIG_LEN * 8));
-        uint32_t fp = MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp);// % (1 << (SIG_LEN * 16));
-        if (fphash == 1) return fp & (65535);
-        else return fp >> 16;
+        return MurmurHash3_x86_32(key, KEY_LEN, fphash == 1 ? seed_hash_to_fp : seed_hash_to_fp2);// % (1 << (SIG_LEN * 8));
+        // uint32_t fp = MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp);// % (1 << (SIG_LEN * 16));
+        // if (fphash == 1) return fp & (65535);
+        // else return fp >> 16;
     }
 
     void calculate_two_fp(const char *key, int &fp1, int &fp2) {
-        uint32_t fp = MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp);// % (1 << (SIG_LEN * 16));
-        fp1 = fp & (65535);
-        fp2 = fp >> 16;
-        // fp1 = MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp);
-        // fp2 = MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp2);
+        // uint32_t fp = MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp);// % (1 << (SIG_LEN * 16));
+        // fp1 = fp & (65535);
+        // fp2 = fp >> 16;
+        fp1 = MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp);
+        fp2 = MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp2);
     }
 
     // return hash of sig(fp), used for alternate index.
@@ -793,6 +793,131 @@ private:
         }
     }
 
+    bool check_hash2_collision(int bucketID, int cellID){
+        Entry entry;
+        RDMA_read(entry, TABLE2, bucketID, cellID);
+        int fp, fp2;
+        calculate_two_fp(entry.key, fp, fp2);
+        char sig2[SIG_LEN];
+        fp_to_sig(sig2, fp2);
+        int h1;
+        h1 = hash_alt(bucketID, TABLE2, fp);
+        for (int i=M; i<N; i++)
+            if (table[TABLE1].bucket[h1].full[i]
+                && memcmp(sig2, table[TABLE1].bucket[h1].sig[i], SIG_LEN*sizeof(char)) == 0)
+                return 1;
+        return 0;
+    }
+
+    bool dfs(int tableID, int bucketID, int cellID, int depth, int oneStepFlag = 0){
+        if (depth > max_kick_number) return false;
+        if (!table[tableID].bucket[bucketID].full[cellID]){
+            // kick
+            table[tableID].bucket[bucketID].full[cellID] = 1;
+            table[tableID].cell[bucketID]++;
+            return true;
+        }
+        if (oneStepFlag) return false;
+        if (table[tableID].bucket[bucketID].fixed[cellID]) return false;
+        table[tableID].bucket[bucketID].fixed[cellID] = 1;
+        int fp;
+        sig_to_fp(fp, table[tableID].bucket[bucketID].sig[cellID]);
+        int alt_bucketID = hash_alt(bucketID, tableID, fp);
+        if (tableID == TABLE2){
+            if (check_hash2_collision(bucketID, cellID)){
+                table[tableID].bucket[bucketID].fixed[cellID] = 0;
+                return false;
+            }
+            for (int i=0; i<6; i++){
+                if (dfs(TABLE1, alt_bucketID, i, depth+1, 1)){
+                    // kick
+                    Entry entry;
+                    RDMA_read(entry, tableID, bucketID, cellID);
+                    RDMA_write(TABLE1, alt_bucketID, i, entry);
+                    memcpy(table[TABLE1].bucket[alt_bucketID].sig[i],
+                        table[tableID].bucket[bucketID].sig[cellID],
+                        SIG_LEN*sizeof(char));
+                    table[tableID].bucket[bucketID].fixed[cellID] = 0;
+                    return true;
+                }
+            }
+            int randomID = rand()%6;
+            if (dfs(TABLE1, alt_bucketID, randomID, depth+1)){
+                // kick
+                Entry entry;
+                RDMA_read(entry, tableID, bucketID, cellID);
+                RDMA_write(TABLE1, alt_bucketID, randomID, entry);
+                memcpy(table[TABLE1].bucket[alt_bucketID].sig[randomID],
+                    table[tableID].bucket[bucketID].sig[cellID],
+                    SIG_LEN*sizeof(char));
+                table[tableID].bucket[bucketID].fixed[cellID] = 0;
+                return true;
+            }
+            table[tableID].bucket[bucketID].fixed[cellID] = 0;
+            return false;
+        } else {
+            for (int i=0; i<8; i++){
+                if (dfs(TABLE2, alt_bucketID, i, depth+1, 1)){
+                    // kick
+                    Entry entry;
+                    RDMA_read(entry, tableID, bucketID, cellID);
+                    RDMA_write(TABLE2, alt_bucketID, i, entry);
+                    memcpy(table[TABLE2].bucket[alt_bucketID].sig[i],
+                        table[tableID].bucket[bucketID].sig[cellID],
+                        SIG_LEN*sizeof(char));
+                    table[tableID].bucket[bucketID].fixed[cellID] = 0;
+                    return true;
+                }
+            }
+            int randomID = rand()%8;
+            if (dfs(TABLE2, alt_bucketID, randomID, depth+1)){
+                // kick
+                Entry entry;
+                RDMA_read(entry, tableID, bucketID, cellID);
+                RDMA_write(TABLE2, alt_bucketID, randomID, entry);
+                memcpy(table[TABLE2].bucket[alt_bucketID].sig[randomID],
+                    table[tableID].bucket[bucketID].sig[cellID],
+                    SIG_LEN*sizeof(char));
+                table[tableID].bucket[bucketID].fixed[cellID] = 0;
+                return true;
+            }
+            table[tableID].bucket[bucketID].fixed[cellID] = 0;
+            return false;
+        }
+    }
+
+    bool dfs(Entry entry, int depth = 0){
+        int fp, fp2;
+        calculate_two_fp(entry.key, fp, fp2);
+        int h[2];
+        h[TABLE1] = hash1(entry.key);
+        char sig[SIG_LEN];
+        fp_to_sig(sig, fp);
+        h[TABLE2] = hash_alt(h[TABLE1], TABLE1, fp);
+
+        for (int i=0; i<8; i++){
+            if (dfs(TABLE2, h[TABLE2], i, depth+1)){
+                // kick
+                RDMA_write(TABLE2, h[TABLE2], i, entry);
+                memcpy(table[TABLE2].bucket[h[TABLE2]].sig[i],
+                    sig,
+                    SIG_LEN*sizeof(char));
+                return true;
+            }
+        }
+        for (int i=0; i<6; i++){
+            if (dfs(TABLE1, h[TABLE1], i, depth+1)){
+                // kick
+                RDMA_write(TABLE1, h[TABLE1], i, entry);
+                memcpy(table[TABLE1].bucket[h[TABLE1]].sig[i],
+                    sig,
+                    SIG_LEN*sizeof(char));
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool bfs(Entry entry){
         int fp = calculate_fp(entry.key, 1);
         int h[2];
@@ -997,7 +1122,7 @@ public:
             return false;
         }
 
-        bool insertOK = bfs(info.second.first);
+        bool insertOK = dfs(info.second.first);
         if (!insertOK || info.first == rebuildNeedkick){
             max_move_num = std::max(max_move_num, move_num);
             sum_move_num += move_num;
@@ -1007,13 +1132,13 @@ public:
             sum_RDMA_read_num2 += RDMA_read_num2;
             return insertOK;
         }
-        insertOK = bfs(info.second.second);
+        insertOK = dfs(info.second.second);
         max_move_num = std::max(max_move_num, move_num);
         sum_move_num += move_num;
         max_RDMA_read_num = std::max(max_RDMA_read_num, RDMA_read_num);
         sum_RDMA_read_num += RDMA_read_num;
-        max_RDMA_read_num2 = std::max(max_RDMA_read_num2, RDMA_read_num2);
-        sum_RDMA_read_num2 += RDMA_read_num2;
+            max_RDMA_read_num2 = std::max(max_RDMA_read_num2, RDMA_read_num2);
+            sum_RDMA_read_num2 += RDMA_read_num2;
         return insertOK;
     }
 
