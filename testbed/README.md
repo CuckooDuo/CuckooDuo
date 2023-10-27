@@ -40,7 +40,7 @@ We also implement the other three algorithms in our testbed: MapEmbed, RACE, and
 
 ## Datasets
 
-Datasets used in RDMA experiments can be find or downloaded as described in `workload/`. After getting data files, modify the corresponding configuration as `load_path` or `run_path` in `test_xx.cpp` in `test/`.
+Datasets used in RDMA experiments can be found or downloaded as described in `workload/`. After getting data files, modify the corresponding configuration as `load_path` or `run_path` in `test_xx.cpp` in `test/`.
 
 ## How to run
 
