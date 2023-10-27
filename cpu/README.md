@@ -20,16 +20,13 @@ This folder contains the codes of CuckooDuo and the related algorithms implement
 
 ## Datasets
 
-Datasets used in CPU experiments can be downloaded from the links below. After downloading, modify the corresponding configuration in `main.cpp` line 17.
-
-*links*
-
+Datasets used in RDMA experiments can be find or downloaded as described in `workload/`. After downloading, modify the corresponding configuration in `main.cpp` line 17.
 
 ## How to run
 
 ### Build
 
-First, download the datasets from the above links. Modify `inputFilePath` in `main.cpp` line 17 to specify which dataset to be used.
+First, get the datasets like described above. Modify `inputFilePath` in `main.cpp` line 17 to specify which dataset to be used.
 
 Then, compile the main.cpp with the following command. 
 
