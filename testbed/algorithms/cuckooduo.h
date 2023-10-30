@@ -184,13 +184,17 @@ private:
         #ifndef RW_LOCK_CK
         if (thread_num > 1) {
             for (const auto &i: mut_idx) {
-                if (!bucket_mut[i.first][i.second].try_lock()) {
-                    // if we can't lock each mutex, we release all of them
-                    for (const auto &j: mut_idx) {
-                        if (i == j) return false;
-                        bucket_mut[j.first][j.second].unlock();
+                if (back_flag) {
+                    if (!bucket_mut[i.first][i.second].try_lock()) {
+                        // if we can't lock each mutex, we release all of them
+                        for (const auto &j: mut_idx) {
+                            if (i == j) return false;
+                            bucket_mut[j.first][j.second].unlock();
+                        }
                     }
                 }
+                else
+                    bucket_mut[i.first][i.second].lock();
             }
         }
         #endif
