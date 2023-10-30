@@ -43,9 +43,9 @@ namespace TEA {
 
 struct Bucket{
     /* These should be in remote for real implement */
-    /* We just do a simulation, so they're both in local and remote */
-    char key[N][KEY_LEN];   //fingerprints are put in here
-    char val[N][VAL_LEN];   //values are put here
+    /* These are in remote */
+    //char key[N][KEY_LEN];   //fingerprints are put in here
+    //char val[N][VAL_LEN];   //values are put here
     /* This could be in local or in remote */
     bool full[N];           //whether the cell is full or not
 };
@@ -170,10 +170,23 @@ private:
         memcpy(entry, bucket_buf[tid].buf, N*2*KV_LEN*sz);
     }
 
-    // given a key, check whether table has key in bucket b, return cell number if true, -1 if false
-    int check_in_table(int b, const char *key) {
+    /* Old version, check in table in the local
+     * given a key, check whether table has key in bucket b
+     * return cell number if true, -1 if false */
+    /*int check_in_table(int b, const char *key) {
         for(int i = 0; i < table.cell[b]; i++) {
             if(memcmp(key, table.bucket[b].key[i], KEY_LEN*sizeof(char)) == 0) {
+                return i;
+            }
+        }
+        return -1;
+    }*/
+    /* New version, check in the buckets read from the remote
+     * given a key, check whether table has key in bucket b
+     * return cell number if true, -1 if false */
+    int check_in_table(int b, char *key, Entry *entry) {
+        for(int i = 0; i < table.cell[b]; i++) {
+            if(memcmp(key, entry[i].key, KEY_LEN*sizeof(char)) == 0) {
                 return i;
             }
         }
@@ -201,16 +214,21 @@ public:
             /* RDMA read: table, bucket h1, h2*/
             /* NOTICE: this is only for simulation*/
             // If h1 is next to h2, read once, otherwise twice
-            Entry tmp_entry1[2][2*N];
+            Entry tmp_buffer[2][2*N];
+            Entry *tmp_bucket[2];
             if (h1 < h2) {
-                RDMA_read_bucket(tmp_entry1, &h1, 1, 2, tid);
+                RDMA_read_bucket(tmp_buffer, &h1, 1, 2, tid);
+                tmp_bucket[0] = tmp_buffer[0];
+                tmp_bucket[1] = tmp_buffer[0]+N;
             }
             else {
                 int h[2] = {h1,h2};
-                RDMA_read_bucket(tmp_entry1, h, 2, 1, tid);
+                RDMA_read_bucket(tmp_buffer, h, 2, 1, tid);
+                tmp_bucket[0] = tmp_buffer[0];
+                tmp_bucket[1] = tmp_buffer[1];
             }
 
-            if(check_in_table(h1, tmp_entry.key) != -1 || check_in_table(h2, tmp_entry.key) != -1) { //collision happen				
+            if(check_in_table(h1, tmp_entry.key, tmp_bucket[0]) != -1 || check_in_table(h2, tmp_entry.key, tmp_bucket[1]) != -1) { //collision happen				
                 bucket_unlock(mut_idx);
                 if(insert_to_stash(tmp_entry)) {					
                     return true;
@@ -221,8 +239,8 @@ public:
             if(table.cell[h1] < N) {  //if h1 has empty cell, insert key into h1
                 for(int i = 0; i < N; i++ ) {
                     if(!table.bucket[h1].full[i]) {
-                        memcpy(table.bucket[h1].key[i], tmp_entry.key, KEY_LEN*sizeof(char));
-                        memcpy(table.bucket[h1].val[i], tmp_entry.val, VAL_LEN*sizeof(char));
+                        //memcpy(table.bucket[h1].key[i], tmp_entry.key, KEY_LEN*sizeof(char));
+                        //memcpy(table.bucket[h1].val[i], tmp_entry.val, VAL_LEN*sizeof(char));
                         /* RDMA write: tmp_entry to table, bucket h1, cell i*/
                         RDMA_write(0, h1, i, tmp_entry, tid);
 
@@ -243,8 +261,8 @@ public:
             if(table.cell[h2] < N) {  //if h2 has empty cell, insert key into h2
                 for(int i = 0; i < N; i++ ) {
                     if(!table.bucket[h2].full[i]) {
-                        memcpy(table.bucket[h2].key[i], tmp_entry.key, KEY_LEN*sizeof(char));
-                        memcpy(table.bucket[h2].val[i], tmp_entry.val, VAL_LEN*sizeof(char));
+                        //memcpy(table.bucket[h2].key[i], tmp_entry.key, KEY_LEN*sizeof(char));
+                        //memcpy(table.bucket[h2].val[i], tmp_entry.val, VAL_LEN*sizeof(char));
                         /* RDMA write: tmp_entry to table, bucket h2, cell i*/
                         RDMA_write(0, h2, i, tmp_entry, tid);
 
@@ -263,15 +281,19 @@ public:
                 return true;
             }
             //choose a victim
-            int tmptable = (rand() % 2 == 0)?h1:h2;
+            //int tmptable = (rand() % 2 == 0)?h1:h2;
+            int tmptable = rand() % 2;
             int tmpcell = rand() % N;
             //victim 
-            memcpy(victim.key, table.bucket[tmptable].key[tmpcell], KEY_LEN*sizeof(char));
-            memcpy(victim.val, table.bucket[tmptable].val[tmpcell], VAL_LEN*sizeof(char));
+            //memcpy(victim.key, table.bucket[tmptable].key[tmpcell], KEY_LEN*sizeof(char));
+            //memcpy(victim.val, table.bucket[tmptable].val[tmpcell], VAL_LEN*sizeof(char));
+            memcpy(victim.key, tmp_bucket[tmptable][tmpcell].key, KEY_LEN*sizeof(char));
+            memcpy(victim.val, tmp_bucket[tmptable][tmpcell].val, VAL_LEN*sizeof(char));
             //insert tmp_entry
-            memcpy(table.bucket[tmptable].key[tmpcell], tmp_entry.key, KEY_LEN*sizeof(char));
-            memcpy(table.bucket[tmptable].val[tmpcell], tmp_entry.val, VAL_LEN*sizeof(char));
+            //memcpy(table.bucket[tmptable].key[tmpcell], tmp_entry.key, KEY_LEN*sizeof(char));
+            //memcpy(table.bucket[tmptable].val[tmpcell], tmp_entry.val, VAL_LEN*sizeof(char));
             /* RDMA write: tmp_entry to table, bucket tmptable, cell tmpcell*/
+            tmptable = (tmptable == 0)?h1:h2;
             RDMA_write(0, tmptable, tmpcell, tmp_entry, tid);
 
             //tmp_entry = victim
@@ -299,17 +321,22 @@ public:
         bucket_lock(mut_idx);
 
         // If h1 is next to h2, read once, otherwise twice
-        Entry tmp_entry1[2][2*N];
+        Entry tmp_buffer[2][2*N];
+        Entry *tmp_bucket[2];
         if (h1 < h2) {
-            RDMA_read_bucket(tmp_entry1, &h1, 1, 2, tid);
+            RDMA_read_bucket(tmp_buffer, &h1, 1, 2, tid);
+            tmp_bucket[0] = tmp_buffer[0];
+            tmp_bucket[1] = tmp_buffer[0]+N;
         }
         else {
             int h[2] = {h1,h2};
-            RDMA_read_bucket(tmp_entry1, h, 2, 1, tid);
+            RDMA_read_bucket(tmp_buffer, h, 2, 1, tid);
+            tmp_bucket[0] = tmp_buffer[0];
+            tmp_bucket[1] = tmp_buffer[1];
         }
 
         //query h1
-        cell = check_in_table(h1, key);
+        cell = check_in_table(h1, key, tmp_bucket[0]);
         if(cell != -1) {
 			/*bucket_unlock(h1);
 
@@ -322,7 +349,7 @@ public:
         }
 
         //query h2
-        cell = check_in_table(h2, key);
+        cell = check_in_table(h2, key, tmp_bucket[1]);
         if(cell != -1) {
 			/*bucket_unlock(h2);
 
@@ -362,19 +389,24 @@ public:
         bucket_lock(mut_idx);
 
         // If h1 is next to h2, read once, otherwise twice
-        Entry tmp_entry1[2][2*N];
+        Entry tmp_buffer[2][2*N];
+        Entry *tmp_bucket[2];
         if (h1 < h2) {
-            RDMA_read_bucket(tmp_entry1, &h1, 1, 2, tid);
+            RDMA_read_bucket(tmp_buffer, &h1, 1, 2, tid);
+            tmp_bucket[0] = tmp_buffer[0];
+            tmp_bucket[1] = tmp_buffer[0]+N;
         }
         else {
             int h[2] = {h1,h2};
-            RDMA_read_bucket(tmp_entry1, h, 2, 1, tid);
+            RDMA_read_bucket(tmp_buffer, h, 2, 1, tid);
+            tmp_bucket[0] = tmp_buffer[0];
+            tmp_bucket[1] = tmp_buffer[1];
         }
         
         int cell;
-        cell = check_in_table(h1, key);
+        cell = check_in_table(h1, key, tmp_bucket[0]);
         if(cell != -1) {
-            memset(table.bucket[h1].key[cell], 0, KEY_LEN);
+            //memset(table.bucket[h1].key[cell], 0, KEY_LEN);
             table.bucket[h1].full[cell] = 0;
             /* RDMA write: 0 to table, bucket h1, cell cell*/
             RDMA_write(0, h1, cell, Entry({{0},{0}}), tid);
@@ -384,9 +416,9 @@ public:
         }
 
         //query in table
-        cell = check_in_table(h2, key);
+        cell = check_in_table(h2, key, tmp_bucket[1]);
         if(cell != -1) {
-            memset(table.bucket[h2].key[cell], 0, KEY_LEN);
+            //memset(table.bucket[h2].key[cell], 0, KEY_LEN);
             table.bucket[h2].full[cell] = 0;
             /* RDMA write: 0 to table, bucket h2, cell cell*/
             RDMA_write(0, h2, cell, Entry({{0},{0}}), tid);
@@ -421,20 +453,25 @@ public:
         bucket_lock(mut_idx);
 
         // If h1 is next to h2, read once, otherwise twice
-        Entry tmp_entry1[2][2*N];
+        Entry tmp_buffer[2][2*N];
+        Entry *tmp_bucket[2];
         if (h1 < h2) {
-            RDMA_read_bucket(tmp_entry1, &h1, 1, 2, tid);
+            RDMA_read_bucket(tmp_buffer, &h1, 1, 2, tid);
+            tmp_bucket[0] = tmp_buffer[0];
+            tmp_bucket[1] = tmp_buffer[0]+N;
         }
         else {
             int h[2] = {h1,h2};
-            RDMA_read_bucket(tmp_entry1, h, 2, 1, tid);
+            RDMA_read_bucket(tmp_buffer, h, 2, 1, tid);
+            tmp_bucket[0] = tmp_buffer[0];
+            tmp_bucket[1] = tmp_buffer[1];
         }
 
         //query in table
         int cell;
-        cell = check_in_table(h1, entry.key);
+        cell = check_in_table(h1, entry.key, tmp_bucket[0]);
         if(cell != -1) {
-            memcpy(table.bucket[h1].val[cell], entry.val, VAL_LEN);
+            //memcpy(table.bucket[h1].val[cell], entry.val, VAL_LEN);
             /* RDMA write: entry.val to table, bucket h1, cell cell*/
             RDMA_write(0, h1, cell, entry, tid);
             
@@ -442,11 +479,11 @@ public:
             return true;
         }
 
-        cell = check_in_table(h2, entry.key);
+        cell = check_in_table(h2, entry.key, tmp_bucket[1]);
         if(cell != -1) {
-            memcpy(table.bucket[h2].val[cell], entry.val, VAL_LEN);
+            //memcpy(table.bucket[h2].val[cell], entry.val, VAL_LEN);
             /* RDMA write: entry.val to table, bucket h2, cell cell*/
-            RDMA_write(0, h1, cell, entry, tid);
+            RDMA_write(0, h2, cell, entry, tid);
             
 			bucket_unlock(mut_idx);
             return true;
