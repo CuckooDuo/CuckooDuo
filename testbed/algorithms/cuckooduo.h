@@ -19,6 +19,7 @@
 #include <queue>
 #include <bitset>
 #include <mutex>
+#include <shared_mutex>
 #pragma once
 
 #include "../rdma/rdma_client.h"
@@ -36,6 +37,8 @@ struct Entry{
     char val[VAL_LEN];
 };
 #endif
+
+//#define RW_LOCK_CK
 
 /* Define CuckooDuo class in namespace CK */
 namespace CK {
@@ -132,27 +135,53 @@ public:
 
     int stash_num;  // the number of entries in stash
 
+    #ifndef RW_LOCK_CK
 	mutex stash_mut;        // mutex for stash visition
-    mutex* bucket_mut[2];   // mutex for bucket visition
+    mutex *bucket_mut[2];   // mutex for bucket visition
+    #endif
+
+    #ifdef RW_LOCK_CK
+    shared_mutex stash_mut;
+    shared_mutex *bucket_mut[2];
+    #endif
 
     int thread_num;     // the number of threads we use
     int connect_num;    // the number of threads we have
 
 private:
     /* function to lock and unlock buckets */
-    bool inline bucket_lock(int table_idx, int bucket_idx) {
+    bool inline bucket_lock(int table_idx, int bucket_idx, bool write_flag) {
+        #ifndef RW_LOCK_CK
         if (thread_num > 1) {
             bucket_mut[table_idx][bucket_idx].lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_CK
+        if (thread_num > 1) {
+            if (write_flag) bucket_mut[table_idx][bucket_idx].lock();
+            else bucket_mut[table_idx][bucket_idx].lock_shared();
+        }
+        #endif
         return true;
     }
-    bool inline bucket_unlock(int table_idx, int bucket_idx) {
+    bool inline bucket_unlock(int table_idx, int bucket_idx, bool write_flag) {
+        #ifndef RW_LOCK_CK
         if (thread_num > 1) {
             bucket_mut[table_idx][bucket_idx].unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_CK
+        if (thread_num > 1) {
+            if (write_flag) bucket_mut[table_idx][bucket_idx].unlock();
+            else bucket_mut[table_idx][bucket_idx].unlock_shared();
+        }
+        #endif
         return true;
     }
-    bool inline bucket_lock(const std::set<pair<int,int>> &mut_idx) {
+    bool inline bucket_lock(const std::set<pair<int,int>> &mut_idx, bool back_flag) {
+        #ifndef RW_LOCK_CK
         if (thread_num > 1) {
             for (const auto &i: mut_idx) {
                 if (!bucket_mut[i.first][i.second].try_lock()) {
@@ -164,28 +193,75 @@ private:
                 }
             }
         }
+        #endif
+
+        #ifdef RW_LOCK_CK
+        if (thread_num > 1) {
+            for (const auto &i: mut_idx) {
+                if (back_flag) {
+                    if (!bucket_mut[i.first][i.second].try_lock()) {
+                        // if we can't lock each mutex, we release all of them
+                        for (const auto &j: mut_idx) {
+                            if (i == j) return false;
+                            bucket_mut[j.first][j.second].unlock();
+                        }
+                    }
+                }
+                else
+                    bucket_mut[i.first][i.second].lock();
+            }
+        }
+        #endif
         return true;
     }
     bool inline bucket_unlock(const std::set<pair<int,int>> &mut_idx) {
+        #ifndef RW_LOCK_CK
         if (thread_num > 1) {
             for (const auto &i: mut_idx) {
                 bucket_mut[i.first][i.second].unlock();
             }
         }
+        #endif
+
+        #ifdef RW_LOCK_CK
+        if (thread_num > 1) {
+            for (const auto &i: mut_idx) {
+                bucket_mut[i.first][i.second].unlock();
+            }
+        }
+        #endif
         return true;
     }
 
     /* function to lock and unlock stash */
-    bool inline stash_lock() {
+    bool inline stash_lock(bool write_flag) {
+        #ifndef RW_LOCK_CK
         if (thread_num > 1) {
             stash_mut.lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_CK
+        if (thread_num > 1) {
+            if(write_flag) stash_mut.lock();
+            else stash_mut.lock_shared();
+        }
+        #endif
         return true;
     }
-    bool inline stash_unlock() {
+    bool inline stash_unlock(bool write_flag) {
+        #ifndef RW_LOCK_CK
         if (thread_num > 1) {
             stash_mut.unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_CK
+        if (thread_num > 1) {
+            if(write_flag) stash_mut.unlock();
+            else stash_mut.unlock_shared();
+        }
+        #endif
         return true;
     }
 
@@ -291,16 +367,16 @@ private:
 
     // insert an full entry to stash
     bool insert_to_stash(const Entry& entry) {
-		stash_lock();
+		stash_lock(true);
         if(stash_num >= STASH_SIZE_CK) {
-			stash_unlock();
+			stash_unlock(true);
             return false;
 		}
         std::string skey(entry.key, KEY_LEN);
         std::string sval(entry.val, VAL_LEN);
         stash.emplace(skey, sval);
         stash_num++;
-		stash_unlock();
+		stash_unlock(true);
         return true;
     }
 
@@ -919,7 +995,7 @@ private:
                     if (from == emptyIndex) break;
                 }
                 // if we can't lock every locks at once, we try another way
-                if (!bucket_lock(mut_idx)) continue;
+                if (!bucket_lock(mut_idx, true)) continue;
                 // read entries in path to entryList
                 for (int i=0; i<listCnt; i++){
                     if (i+1<listCnt){
@@ -1001,7 +1077,7 @@ private:
                                                                    std::make_pair(TABLE2, h[TABLE2])});
                                 // unlock old locks, and lock for build
                                 bucket_unlock(mut_idx);
-                                bucket_lock(mut_idx_r);
+                                bucket_lock(mut_idx_r, false);
                                 // rebuild without balance flag
                                 rebuildInfo info = rebuild(entryList[i], 0, tid);
                                 bucket_unlock(mut_idx_r);
@@ -1121,7 +1197,7 @@ public:
         // lock buckets for rebuild
         std::set<pair<int,int>> mut_idx({std::make_pair(TABLE1,h[TABLE1]),
                                          std::make_pair(TABLE2,h[TABLE2])});
-        bucket_lock(mut_idx);
+        bucket_lock(mut_idx, false);
         // try rebuild with balance flag
         rebuildInfo info = rebuild(entry, 1, tid);
 
@@ -1160,39 +1236,39 @@ public:
         int cell;
 
         //query in table[TABLE1]
-		bucket_lock(TABLE1, h1);
+		bucket_lock(TABLE1, h1, false);
         cell = check_in_table1(h1, sig, sig2);
         if(cell != -1) {
             /* RDMA read: table[TABLE1], bucket h1, cell cell to val*/
             RDMA_read(read_buf[tid][0], TABLE1, h1, cell, tid);
 
-			bucket_unlock(TABLE1, h1);
+			bucket_unlock(TABLE1, h1, false);
             if (memcmp(key, read_buf[tid][0].key, KEY_LEN) == 0)
                 return true;
 			
             else return false;
         }
-        bucket_unlock(TABLE1, h1);
+        bucket_unlock(TABLE1, h1, false);
 
         //query in table[TABLE2]
         int h2 = hash_alt(h1, TABLE1, fp);
-		bucket_lock(TABLE2, h2);
+		bucket_lock(TABLE2, h2, false);
         cell = check_in_table2(h2, sig);
         if(cell != -1) {
             /* RDMA read: table[TABLE2], bucket h2, cell cell to val*/
             RDMA_read(read_buf[tid][0], TABLE2, h2, cell, tid);
 
-			bucket_unlock(TABLE2, h2);
+			bucket_unlock(TABLE2, h2, false);
             if (memcmp(key, read_buf[tid][0].key, KEY_LEN) == 0)
                 return true;
 
             else return false;
         }
-        bucket_unlock(TABLE2, h2);
+        bucket_unlock(TABLE2, h2, false);
 
         // query in stash
         std::string skey(key, KEY_LEN);
-		stash_lock();
+		stash_lock(false);
         auto entry = stash.find(skey);
         if(entry != stash.end()) {
             if(val != NULL) {
@@ -1200,10 +1276,10 @@ public:
                 char* pval = const_cast<char*>(sval.c_str());
                 memcpy(val, pval, VAL_LEN);
             }
-			stash_unlock();
+			stash_unlock(false);
             return true;
         }
-		stash_unlock();
+		stash_unlock(false);
 
         //miss
         return false;
@@ -1222,55 +1298,55 @@ public:
         int cell;
 
         //query in table[TABLE1]
-		bucket_lock(TABLE1, h1);
+		bucket_lock(TABLE1, h1, true);
         cell = check_in_table1(h1, sig, sig2);
         if(cell != -1) {
             /* RDMA read: table[TABLE1], bucket h1, cell cell to val*/
             RDMA_read(read_buf[tid][0], TABLE1, h1, cell, tid);
             if (memcmp(key, read_buf[tid][0].key, KEY_LEN) != 0) {
-                bucket_unlock(TABLE1, h1);
+                bucket_unlock(TABLE1, h1, true);
                 return false;
             }
 
             memset(table[TABLE1].bucket[h1].sig[cell], 0, SIG_LEN);
             table[TABLE1].bucket[h1].full[cell] = 0;
 			
-			bucket_unlock(TABLE1, h1);
+			bucket_unlock(TABLE1, h1, true);
 			return true;
         }
-		bucket_unlock(TABLE1, h1);
+		bucket_unlock(TABLE1, h1, true);
 
         //query in table[TABLE2]
         int h2 = hash_alt(h1, TABLE1, fp);
-		bucket_lock(TABLE2, h2);
+		bucket_lock(TABLE2, h2, true);
         cell = check_in_table2(h2, sig);
         if(cell != -1) {
             RDMA_read(read_buf[tid][0], TABLE2, h2, cell, tid);
             if (memcmp(key, read_buf[tid][0].key, KEY_LEN) != 0) {
-                bucket_unlock(TABLE2, h2);
+                bucket_unlock(TABLE2, h2, true);
                 return false;
             }
 
             memset(table[TABLE2].bucket[h2].sig[cell], 0, SIG_LEN);
             table[TABLE2].bucket[h2].full[cell] = 0;
 
-			bucket_unlock(TABLE2, h2);
+			bucket_unlock(TABLE2, h2, true);
             return true;
         }
-		bucket_unlock(TABLE2, h2);
+		bucket_unlock(TABLE2, h2, true);
 
         //query in stash, if find then delete
         std::string skey(key, KEY_LEN);
 
-		stash_lock();
+		stash_lock(true);
         auto entry = stash.find(skey);
         if(entry != stash.end()) {
             stash.erase(entry);
             stash_num--;
-			stash_unlock();
+			stash_unlock(true);
             return true;
         }
-		stash_unlock();
+		stash_unlock(true);
 
         //miss
         return false;
@@ -1289,53 +1365,53 @@ public:
         int cell;
 
         //query in table[TABLE1]
-		bucket_lock(TABLE1, h1);
+		bucket_lock(TABLE1, h1, true);
         cell = check_in_table1(h1, sig, sig2);
         if(cell != -1) {
             /* RDMA read: table[TABLE1], bucket h1, cell cell to val*/
             RDMA_read(read_buf[tid][0], TABLE1, h1, cell, tid);
             
             if (memcmp(entry.key, read_buf[tid][0].key, KEY_LEN) != 0) {
-                bucket_unlock(TABLE1, h1);
+                bucket_unlock(TABLE1, h1, true);
                 return false;
             }
             RDMA_write(TABLE1, h1, cell, entry, tid);
 
-			bucket_unlock(TABLE1, h1);
+			bucket_unlock(TABLE1, h1, true);
             return true;
         }
-		bucket_unlock(TABLE1, h1);
+		bucket_unlock(TABLE1, h1, true);
 
         //query in table[TABLE2]
         int h2 = hash_alt(h1, TABLE1, fp);
-		bucket_lock(TABLE2, h2);
+		bucket_lock(TABLE2, h2, true);
         cell = check_in_table2(h2, sig);
         if(cell != -1) {
             /* RDMA read: table[TABLE2], bucket h2, cell cell to val*/
             RDMA_read(read_buf[tid][0], TABLE2, h2, cell, tid);
 
             if (memcmp(entry.key, read_buf[tid][0].key, KEY_LEN) != 0) {
-                bucket_unlock(TABLE2, h2);
+                bucket_unlock(TABLE2, h2, true);
                 return false;
             }
             RDMA_write(TABLE2, h2, cell, entry, tid);
 
-			bucket_unlock(TABLE2, h2);
+			bucket_unlock(TABLE2, h2, true);
             return true;
         }
-		bucket_unlock(TABLE2, h2);
+		bucket_unlock(TABLE2, h2, true);
 
         // query in stash
         std::string skey(entry.key, KEY_LEN);
-		stash_lock();
+		stash_lock(true);
         auto it = stash.find(skey);
         if(it != stash.end()) {
             std::string sval = entry.val;
             it->second = sval;
-			stash_unlock();
+			stash_unlock(true);
             return true;
         }
-		stash_unlock();
+		stash_unlock(true);
 
         //miss
         return false;
@@ -1377,9 +1453,17 @@ public:
             delete [] table[i].cell;
             table[i].cell = tmp_cell;
 
+            #ifndef RW_LOCK_CK
             mutex *tmp_mut = new mutex[bucket_number];
             delete [] bucket_mut[i];
             bucket_mut[i] = tmp_mut;
+            #endif
+
+            #ifdef RW_LOCK_CK
+            shared_mutex *tmp_mut = new shared_mutex[bucket_number];
+            delete [] bucket_mut[i];
+            bucket_mut[i] = tmp_mut;
+            #endif
 
             for (int t = 0; t < thread_num; ++t) {
                 indexType **tmp_visit = new indexType*[bucket_number];
@@ -1537,8 +1621,16 @@ public:
             this->dirtyList.push_back({});
         }
 
+        #ifndef RW_LOCK_CK
 		this->bucket_mut[TABLE1] = new mutex[this->bucket_number];
 		this->bucket_mut[TABLE2] = new mutex[this->bucket_number];
+        #endif
+
+        #ifdef RW_LOCK_CK
+        this->bucket_mut[TABLE1] = new shared_mutex[this->bucket_number];
+		this->bucket_mut[TABLE2] = new shared_mutex[this->bucket_number];
+        #endif
+
     }
 
     ~CuckooHashTable() {
