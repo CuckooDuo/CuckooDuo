@@ -601,7 +601,6 @@ public:
             // for simulate, read a bucket
             Entry tmp_entry[N];
             ME_RDMA_read(&d, 1, &tmp_entry, tid);
-			bucket_unlock(d);
 
             if (query_key_in_bucket(key, d, NULL)) {
 				bucket_unlock(d);
