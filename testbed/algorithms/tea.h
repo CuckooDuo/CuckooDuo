@@ -16,6 +16,7 @@
 #include <stack>
 #include <unordered_map>
 #include <mutex>
+#include <shared_mutex>
 #include "../rdma/rdma_client.h"
 #pragma once
 
@@ -30,6 +31,8 @@ struct Entry{
     char val[VAL_LEN];
 };
 #endif
+
+//#define RW_LOCK_TEA
 
 /* Define TEA class in namespace TEA */
 namespace TEA {
@@ -69,46 +72,111 @@ public:
 
     int stash_num;  // the number of entries in stash
 
-	mutex stash_mut;    // mutex for stash visition
-    mutex *bucket_mut;  // mutex for bucket visition
+	#ifndef RW_LOCK_TEA
+	mutex stash_mut;        // mutex for stash visition
+    mutex *bucket_mut;      // mutex for bucket visition
+    #endif
+
+    #ifdef RW_LOCK_TEA
+    shared_mutex stash_mut;
+    shared_mutex *bucket_mut;
+    #endif
 
     int thread_num; // the number of threads we use
 
 private:
 	/* function to lock and unlock buckets */
-	void inline bucket_lock(int bucket_idx) {
+	void inline bucket_lock(int bucket_idx, bool write_flag) {
+        #ifndef RW_LOCK_TEA
         if (thread_num > 1) {
             bucket_mut[bucket_idx].lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_TEA
+        if (thread_num > 1) {
+            if(write_flag) bucket_mut[bucket_idx].lock();
+            else bucket_mut[bucket_idx].lock_shared();
+        }
+        #endif
     }
-    void inline bucket_unlock(int bucket_idx) {
+    void inline bucket_unlock(int bucket_idx, bool write_flag) {
+        #ifndef RW_LOCK_TEA
         if (thread_num > 1) {
             bucket_mut[bucket_idx].unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_TEA
+        if (thread_num > 1) {
+            if(write_flag) bucket_mut[bucket_idx].unlock();
+            else bucket_mut[bucket_idx].unlock_shared();
+        }
+        #endif
     }
-    void inline bucket_lock(const std::set<int> &mut_idx) {
+    void inline bucket_lock(const std::set<int> &mut_idx, bool write_flag) {
+        #ifndef RW_LOCK_TEA
         if (thread_num > 1) {
             for (const auto &i : mut_idx)
                 bucket_mut[i].lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_TEA
+        if (thread_num > 1) {
+            for (const auto &i : mut_idx) {
+                if(write_flag) bucket_mut[i].lock();
+                else bucket_mut[i].lock_shared();
+            }
+        }
+        #endif
     }
-    void inline bucket_unlock(const std::set<int> &mut_idx) {
+    void inline bucket_unlock(const std::set<int> &mut_idx, bool write_flag) {
+        #ifndef RW_LOCK_TEA
         if (thread_num > 1) {
             for (const auto &i : mut_idx)
                 bucket_mut[i].unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_TEA
+        if (thread_num > 1) {
+            for (const auto &i : mut_idx) {
+                if(write_flag) bucket_mut[i].unlock();
+                else bucket_mut[i].unlock_shared();
+            }
+        }
+        #endif
     }
 
     /* function to lock and unlock stash */
-    void inline stash_lock() {
+    void inline stash_lock(bool write_flag) {
+        #ifndef RW_LOCK_TEA
         if (thread_num > 1) {
             stash_mut.lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_TEA
+        if (thread_num > 1) {
+            if(write_flag) stash_mut.lock();
+            else stash_mut.lock_shared();
+        }
+        #endif
     }
-    void inline stash_unlock() {
+    void inline stash_unlock(bool write_flag) {
+        #ifndef RW_LOCK_TEA
         if (thread_num > 1) {
             stash_mut.unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_TEA
+        if (thread_num > 1) {
+            if(write_flag) stash_mut.unlock();
+            else stash_mut.unlock_shared();
+        }
+        #endif
     }
 
     void initialize_hash_functions(){
@@ -137,16 +205,16 @@ private:
 
     // insert an full entry to stash
     bool insert_to_stash(const Entry& entry) {
-		stash_lock();
+		stash_lock(true);
         if(stash_num >= STASH_SIZE_TEA) {
-			stash_unlock();
+			stash_unlock(true);
             return false;
 		}
         std::string skey(entry.key, KEY_LEN);
         std::string sval(entry.val, VAL_LEN);
         stash.emplace(skey, sval);
         stash_num++;
-		stash_unlock();
+		stash_unlock(true);
         return true;
     }
 
@@ -209,7 +277,7 @@ public:
             int h2 = (h1 + 1) % bucket_number; //next bucket is the alternate bucket in TEA.
 
             std::set<int> mut_idx({h1,h2});
-            bucket_lock(mut_idx);
+            bucket_lock(mut_idx, true);
 
             /* RDMA read: table, bucket h1, h2*/
             /* NOTICE: this is only for simulation*/
@@ -229,7 +297,7 @@ public:
             }
 
             if(check_in_table(h1, tmp_entry.key, tmp_bucket[0]) != -1 || check_in_table(h2, tmp_entry.key, tmp_bucket[1]) != -1) { //collision happen				
-                bucket_unlock(mut_idx);
+                bucket_unlock(mut_idx, true);
                 if(insert_to_stash(tmp_entry)) {					
                     return true;
 				}
@@ -255,7 +323,7 @@ public:
                     kick_success_num++;
                     kick_stat[tries]++;*/
                 }
-                bucket_unlock(mut_idx);
+                bucket_unlock(mut_idx, true);
                 return true;
             }
             if(table.cell[h2] < N) {  //if h2 has empty cell, insert key into h2
@@ -277,7 +345,7 @@ public:
                     kick_success_num++;
                     kick_stat[tries]++;*/
                 }
-                bucket_unlock(mut_idx);
+                bucket_unlock(mut_idx, true);
                 return true;
             }
             //choose a victim
@@ -301,7 +369,7 @@ public:
             memcpy(tmp_entry.val, victim.val, VAL_LEN*sizeof(char));
         
             tries++;
-            bucket_unlock(mut_idx);
+            bucket_unlock(mut_idx, true);
         }
         //max kick reached
 		
@@ -318,7 +386,7 @@ public:
         int cell;
 
         std::set<int> mut_idx({h1,h2});
-        bucket_lock(mut_idx);
+        bucket_lock(mut_idx, false);
 
         // If h1 is next to h2, read once, otherwise twice
         Entry tmp_buffer[2][2*N];
@@ -344,7 +412,7 @@ public:
                 //memcpy(val, &read_buf[0].val, PTR_LEN);
                 return true;
             }*/
-            bucket_unlock(mut_idx);
+            bucket_unlock(mut_idx, false);
             return true;
         }
 
@@ -357,23 +425,23 @@ public:
                 //memcpy(val, &read_buf[0].val, PTR_LEN);
                 return true;
             }*/
-            bucket_unlock(mut_idx);
+            bucket_unlock(mut_idx, false);
             return true;
         }
-		bucket_unlock(mut_idx);
+		bucket_unlock(mut_idx, false);
 
         // query in stash
         std::string skey(key, KEY_LEN);
-		stash_lock();
+		stash_lock(false);
         auto entry = stash.find(skey);
         if(entry != stash.end()) {
             std::string sval = entry->second;
-            stash_unlock();
+            stash_unlock(false);
             char* pval = const_cast<char*>(sval.c_str());
             if(val != NULL) memcpy(val, pval, VAL_LEN);
             return true;
         }
-		stash_unlock();
+		stash_unlock(false);
 
         //miss
         return false;
@@ -386,7 +454,7 @@ public:
         int h2 = (h1 + 1) % bucket_number;
 
         std::set<int> mut_idx({h1,h2});
-        bucket_lock(mut_idx);
+        bucket_lock(mut_idx, true);
 
         // If h1 is next to h2, read once, otherwise twice
         Entry tmp_buffer[2][2*N];
@@ -411,7 +479,7 @@ public:
             /* RDMA write: 0 to table, bucket h1, cell cell*/
             RDMA_write(0, h1, cell, Entry({{0},{0}}), tid);
 
-			bucket_unlock(mut_idx);
+			bucket_unlock(mut_idx, true);
             return true;
         }
 
@@ -423,22 +491,22 @@ public:
             /* RDMA write: 0 to table, bucket h2, cell cell*/
             RDMA_write(0, h2, cell, Entry({{0},{0}}), tid);
 
-			bucket_unlock(mut_idx);
+			bucket_unlock(mut_idx, true);
             return true;
         }
-		bucket_unlock(mut_idx);
+		bucket_unlock(mut_idx, true);
 
         //query in stash, if find then delete
         std::string skey(key, KEY_LEN);
-		stash_lock();
+		stash_lock(true);
         auto entry = stash.find(skey);
         if(entry != stash.end()) {
             stash.erase(entry);
             stash_num--;
-			stash_unlock();
+			stash_unlock(true);
             return true;
         }
-		stash_unlock();
+		stash_unlock(true);
 
         //miss
         return false;
@@ -450,7 +518,7 @@ public:
         int h2 = (h1 + 1) % bucket_number;
 
         std::set<int> mut_idx({h1,h2});
-        bucket_lock(mut_idx);
+        bucket_lock(mut_idx, true);
 
         // If h1 is next to h2, read once, otherwise twice
         Entry tmp_buffer[2][2*N];
@@ -475,7 +543,7 @@ public:
             /* RDMA write: entry.val to table, bucket h1, cell cell*/
             RDMA_write(0, h1, cell, entry, tid);
             
-			bucket_unlock(mut_idx);
+			bucket_unlock(mut_idx, true);
             return true;
         }
 
@@ -485,22 +553,22 @@ public:
             /* RDMA write: entry.val to table, bucket h2, cell cell*/
             RDMA_write(0, h2, cell, entry, tid);
             
-			bucket_unlock(mut_idx);
+			bucket_unlock(mut_idx, true);
             return true;
         }
-		bucket_unlock(mut_idx);
+		bucket_unlock(mut_idx, true);
 
         // query in stash
         std::string skey(entry.key, KEY_LEN);
-		stash_lock();
+		stash_lock(true);
         auto it = stash.find(skey);
         if(it != stash.end()) {
             std::string sval = entry.val;
             it->second = sval;
-			stash_unlock();
+			stash_unlock(true);
             return true;
         }
-		stash_unlock();
+		stash_unlock(true);
 
         //miss
         return false;
@@ -519,7 +587,13 @@ public:
 
         stash_num = 0;
 
+		#ifndef RW_LOCK_TEA
 		this->bucket_mut = new mutex[this->bucket_number];
+        #endif
+
+        #ifdef RW_LOCK_TEA
+        this->bucket_mut = new shared_mutex[this->bucket_number];
+        #endif
     }
 
     ~TEATable() {
