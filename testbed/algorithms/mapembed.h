@@ -1,5 +1,10 @@
 /*
  * Class declaraiton and definition for MapEmbed
+ * In this file, we do not use remote memory in fact
+ * We just implement a KV table locally, and set a same one in remote
+ * Once we read/write something in local, we do the same one with RDMA function for simulation
+ * We ensure that this algorithm can work with remote memory access correctly
+ * We may update a true implemention with remote KV table soon
  * 
  */
 
@@ -18,6 +23,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
 
 #include "../rdma/rdma_client.h"
@@ -33,6 +39,8 @@ struct Entry{
     char val[VAL_LEN];
 };
 #endif
+
+//#define RW_LOCK_ME
 
 /* Define MapEmbed class in namespace ME */
 namespace ME {
@@ -118,59 +126,143 @@ public:
 public:
     int bucket_items;
 
+    #ifndef RW_LOCK_ME
     mutex stash_mut;    // mutex for stash visition
 	mutex *bucket_mut;  // mutex for bucket visition
 	mutex **cell_mut;   // mutex for cell visition
+    #endif
+
+    #ifdef RW_LOCK_ME
+    shared_mutex stash_mut;    // mutex for stash visition
+	shared_mutex *bucket_mut;  // mutex for bucket visition
+	shared_mutex **cell_mut;   // mutex for cell visition
+    #endif
 
     int thread_num;
 
 private:
     /* function to lock and unlock buckets */
-	void inline bucket_lock(int bucket_idx) {
+	void inline bucket_lock(int bucket_idx, bool write_flag) {
+        #ifndef RW_LOCK_ME
         if (thread_num > 1) {
             bucket_mut[bucket_idx].lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_ME
+        if (thread_num > 1) {
+            if(write_flag) bucket_mut[bucket_idx].lock();
+            else bucket_mut[bucket_idx].lock_shared();
+        }
+        #endif
     }
-    void inline bucket_unlock(int bucket_idx) {
+    void inline bucket_unlock(int bucket_idx, bool write_flag) {
+        #ifndef RW_LOCK_ME
         if (thread_num > 1) {
             bucket_mut[bucket_idx].unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_ME
+        if (thread_num > 1) {
+            if(write_flag) bucket_mut[bucket_idx].unlock();
+            else bucket_mut[bucket_idx].unlock_shared();
+        }
+        #endif
     }
-    void inline bucket_lock(const std::set<int> &mut_idx) {
+    void inline bucket_lock(const std::set<int> &mut_idx, bool write_flag) {
+        #ifndef RW_LOCK_ME
         if (thread_num > 1) {
             for (const auto &i : mut_idx)
                 bucket_mut[i].lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_ME
+        if (thread_num > 1) {
+            for (const auto &i : mut_idx) {
+                if(write_flag) bucket_mut[i].lock();
+                else bucket_mut[i].lock_shared();
+            }
+        }
+        #endif
     }
-    void inline bucket_unlock(const std::set<int> &mut_idx) {
+    void inline bucket_unlock(const std::set<int> &mut_idx, bool write_flag) {
+        #ifndef RW_LOCK_ME
         if (thread_num > 1) {
             for (const auto &i : mut_idx)
                 bucket_mut[i].unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_ME
+        if (thread_num > 1) {
+            for (const auto &i : mut_idx) {
+                if(write_flag) bucket_mut[i].unlock();
+                else bucket_mut[i].unlock_shared();
+            }
+        }
+        #endif
     }
 
     /* function to lock and unlock stash */
-    void inline stash_lock() {
+    void inline stash_lock(bool write_flag) {
+        #ifndef RW_LOCK_ME
         if (thread_num > 1) {
             stash_mut.lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_ME
+        if (thread_num > 1) {
+            if(write_flag) stash_mut.lock();
+            else stash_mut.lock_shared();
+        }
+        #endif
     }
-    void inline stash_unlock() {
+    void inline stash_unlock(bool write_flag) {
+        #ifndef RW_LOCK_ME
         if (thread_num > 1) {
             stash_mut.unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_ME
+        if (thread_num > 1) {
+            if(write_flag) stash_mut.unlock();
+            else stash_mut.unlock_shared();
+        }
+        #endif
     }
 
     /* function to lock and unlock cell */
-    void inline cell_lock(int layer, int k) {
+    void inline cell_lock(int layer, int k, bool write_flag) {
+        #ifndef RW_LOCK_ME
         if (thread_num > 1) {
             cell_mut[layer][k].lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_ME
+        if (thread_num > 1) {
+            if(write_flag) cell_mut[layer][k].lock();
+            else cell_mut[layer][k].lock_shared();
+        }
+        #endif
     }
-    void inline cell_unlock(int layer, int k) {
+    void inline cell_unlock(int layer, int k, bool write_flag) {
+        #ifndef RW_LOCK_ME
         if (thread_num > 1) {
             cell_mut[layer][k].unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_ME
+        if (thread_num > 1) {
+            if(write_flag) cell_mut[layer][k].unlock();
+            else cell_mut[layer][k].unlock_shared();
+        }
+        #endif
     }
 
     void initialize_hash_functions(){
@@ -255,16 +347,16 @@ private:
 
     // insert an full entry to stash
     bool insert_to_stash(const Entry& entry) {
-		stash_lock();
+		stash_lock(true);
         if(stash_num >= STASH_SIZE_ME) {
-			stash_unlock();
+			stash_unlock(true);
             return false;
 		}
         std::string skey(entry.key, KEY_LEN);
         std::string sval(entry.val, VAL_LEN);
         stash.emplace(skey, sval);
         stash_num++;
-		stash_unlock();
+		stash_unlock(true);
         return true;
     }
 
@@ -461,11 +553,19 @@ public:
 
         bucket_items = 0;
 
+        #ifndef RW_LOCK_ME
 		bucket_mut = new mutex[bucket_number];
-
 		cell_mut = new mutex*[cell_layer];
 		for (int i = 0; i < cell_layer; ++i)
 			cell_mut[i] = new mutex[cell_number[i] + 10];
+        #endif
+
+        #ifdef RW_LOCK_ME
+		bucket_mut = new shared_mutex[bucket_number];
+		cell_mut = new shared_mutex*[cell_layer];
+		for (int i = 0; i < cell_layer; ++i)
+			cell_mut[i] = new shared_mutex[cell_number[i] + 10];
+        #endif
     }
     
     ~MapEmbed(){
@@ -491,9 +591,9 @@ public:
             int k = calculate_cell(kv.key, layer);
             // k: cell index
 
-			cell_lock(layer, k);
+			cell_lock(layer, k, true);
             if(cell[layer][k] == cell_full) {
-				cell_unlock(layer, k);
+				cell_unlock(layer, k, true);
                 continue;
 			}
             int d = calculate_bucket(kv.key, layer, k);
@@ -505,7 +605,7 @@ public:
             std::set<int> mut_idx;
 			//mut_idx.insert(d);
 
-			bucket_lock(d);
+			bucket_lock(d, true);
 
             // for simulate, read a bucket
             Entry tmp_entry[cell_hash][N];
@@ -514,16 +614,16 @@ public:
                 // for simulate, write a bucket
                 ME_RDMA_write(&d, 1, &tmp_entry[0], tid);
 
-				bucket_unlock(d);
-				cell_unlock(layer, k);
+				bucket_unlock(d, true);
+				cell_unlock(layer, k, true);
                 return true;
             }
 
-            bucket_unlock(d);
+            bucket_unlock(d, true);
 
             for (int i = 0; i < cell_hash; ++i)
 				mut_idx.insert(bucketID[i]);
-            bucket_lock(mut_idx);
+            bucket_lock(mut_idx, true);
             // for simulate, read the rest of buckets
             ME_RDMA_read(bucketID, cell_hash-1, &tmp_entry[1], tid);		
 
@@ -553,8 +653,8 @@ public:
                     cell[layer][k] = now_cell;
                     bool ret = true;
 
-					bucket_unlock(mut_idx);
-					cell_unlock(layer, k);
+					bucket_unlock(mut_idx, true);
+					cell_unlock(layer, k, true);
 
                     for(int i = 0; i < size; ++i)
                         ret &= insert(kvs[i], layer+1, tid);
@@ -571,8 +671,8 @@ public:
                     // for simulate, write all buckets
                     ME_RDMA_write(bucketID, cell_hash, tmp_entry, tid);
 					
-					bucket_unlock(mut_idx);
-					cell_unlock(layer, k);
+					bucket_unlock(mut_idx, true);
+					cell_unlock(layer, k, true);
 
                     return true;
                 }
@@ -590,40 +690,40 @@ public:
         for(int layer = 0; layer < cell_layer; ++layer){
             int k = calculate_cell(key, layer);
 
-			cell_lock(layer, k);
+			cell_lock(layer, k, false);
             if(cell[layer][k] == cell_full) {
-				cell_unlock(layer, k);
+				cell_unlock(layer, k, false);
                 continue;
 			}
             int d = calculate_bucket(key, layer, k);
             
-			bucket_lock(d);
+			bucket_lock(d, false);
             // for simulate, read a bucket
             Entry tmp_entry[N];
             ME_RDMA_read(&d, 1, &tmp_entry, tid);
 
             if (query_key_in_bucket(key, d, NULL)) {
-				bucket_unlock(d);
-				cell_unlock(layer, k);
+				bucket_unlock(d, false);
+				cell_unlock(layer, k, false);
 				return true;
 			}
 
-			bucket_unlock(d);
-			cell_unlock(layer, k);
+			bucket_unlock(d, false);
+			cell_unlock(layer, k, false);
         }
 
         // query in stash
         std::string skey(key, KEY_LEN);
-		stash_lock();
+		stash_lock(false);
         auto entry = stash.find(skey);
         if(entry != stash.end()) {
             std::string sval = entry->second;
             char* pval = const_cast<char*>(sval.c_str());
             if(val != NULL) memcpy(val, pval, VAL_LEN);
-			stash_unlock();
+			stash_unlock(false);
             return true;
         }
-		stash_unlock();
+		stash_unlock(false);
 
         return false;
     }
@@ -633,41 +733,41 @@ public:
         for(int layer = 0; layer < cell_layer; ++layer){
             int k = calculate_cell(key, layer);
 
-			cell_lock(layer, k);
+			cell_lock(layer, k, true);
             if(cell[layer][k] == cell_full) {
-				cell_unlock(layer, k);
+				cell_unlock(layer, k, true);
                 continue;
 			}
             int d = calculate_bucket(key, layer, k);
 
-			bucket_lock(d);
+			bucket_lock(d, true);
             // for simulate, read a bucket
             Entry tmp_entry[N];
             ME_RDMA_read(&d, 1, &tmp_entry, tid);
             if (!query_key_in_bucket(key, d, NULL)) {
-				bucket_unlock(d);
-				cell_unlock(layer, k);
+				bucket_unlock(d, true);
+				cell_unlock(layer, k, true);
 				return false;
 			}
             // for simulate, write a bucket
             ME_RDMA_write(&d, 1, NULL, tid);
-			bucket_unlock(d);
+			bucket_unlock(d, true);
 
-			cell_unlock(layer, k);
+			cell_unlock(layer, k, true);
 			return true;
         }
 
         //query in stash, if find then delete
         std::string skey(key, KEY_LEN);
-		stash_lock();
+		stash_lock(true);
         auto entry = stash.find(skey);
         if(entry != stash.end()) {
             stash.erase(entry);
             stash_num--;
-			stash_unlock();
+			stash_unlock(true);
             return true;
         }
-		stash_unlock();
+		stash_unlock(true);
 
         return false;
     }
@@ -677,41 +777,41 @@ public:
         for(int layer = 0; layer < cell_layer; ++layer){
             int k = calculate_cell(entry.key, layer);
 
-			cell_lock(layer, k);
+			cell_lock(layer, k, true);
             if(cell[layer][k] == cell_full) {
-				cell_unlock(layer, k);
+				cell_unlock(layer, k, true);
                 continue;
 			}
             int d = calculate_bucket(entry.key, layer, k);
 
-			bucket_lock(d);
+			bucket_lock(d, true);
             // for simulate, read a bucket
             Entry tmp_entry[N];
             ME_RDMA_read(&d, 1, &tmp_entry, tid);
             if (!query_key_in_bucket(entry.key, d, NULL)) {
-				bucket_unlock(d);
-				cell_unlock(layer, k);
+				bucket_unlock(d, true);
+				cell_unlock(layer, k, true);
 				return false;
 			}
             // for simulate, write a bucket
             ME_RDMA_write(&d, 1, &tmp_entry, tid);
-			bucket_unlock(d);
+			bucket_unlock(d, true);
 
-			cell_unlock(layer, k);
+			cell_unlock(layer, k, true);
 			return true;
         }
 
         // query in stash
-        stash_lock();
+        stash_lock(true);
         std::string skey(entry.key, KEY_LEN);
         auto it = stash.find(skey);
         if(it != stash.end()) {
             std::string sval = entry.val;
             it->second = sval;
-            stash_unlock();
+            stash_unlock(true);
             return true;
         }
-        stash_unlock();
+        stash_unlock(true);
         
         return false;
     }
