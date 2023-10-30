@@ -16,6 +16,7 @@
 #include <stack>
 #include <unordered_map>
 #include <mutex>
+#include <shared_mutex>
 #include "../rdma/rdma_client.h"
 #pragma once
 
@@ -30,6 +31,8 @@ struct Entry{
     char val[VAL_LEN];
 };
 #endif
+
+//#define RW_LOCK_RACE
 
 /* Define RACE class in namespace RACE */
 namespace RACE {
@@ -68,46 +71,111 @@ public:
 
     int stash_num;  // the number of entries in stash
 
-    mutex stash_mut;    // mutex for stash visition
-    mutex *bucket_mut;  // mutex for bucket visition
+    #ifndef RW_LOCK_RACE
+	mutex stash_mut;        // mutex for stash visition
+    mutex *bucket_mut;      // mutex for bucket visition
+    #endif
+
+    #ifdef RW_LOCK_RACE
+    shared_mutex stash_mut;
+    shared_mutex *bucket_mut;
+    #endif
 
     int thread_num; // the number of threads we use
 
 private:
     /* function to lock and unlock buckets */
-	void inline bucket_lock(int bucket_idx) {
+	void inline bucket_lock(int bucket_idx, bool write_flag) {
+        #ifndef RW_LOCK_RACE
         if (thread_num > 1) {
             bucket_mut[bucket_idx].lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_RACE
+        if (thread_num > 1) {
+            if(write_flag) bucket_mut[bucket_idx].lock();
+            else bucket_mut[bucket_idx].lock_shared();
+        }
+        #endif
     }
-    void inline bucket_unlock(int bucket_idx) {
+    void inline bucket_unlock(int bucket_idx, bool write_flag) {
+        #ifndef RW_LOCK_RACE
         if (thread_num > 1) {
             bucket_mut[bucket_idx].unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_RACE
+        if (thread_num > 1) {
+            if(write_flag) bucket_mut[bucket_idx].unlock();
+            else bucket_mut[bucket_idx].unlock_shared();
+        }
+        #endif
     }
-    void inline bucket_lock(const std::set<int> &mut_idx) {
+    void inline bucket_lock(const std::set<int> &mut_idx, bool write_flag) {
+        #ifndef RW_LOCK_RACE
         if (thread_num > 1) {
             for (const auto &i : mut_idx)
                 bucket_mut[i].lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_RACE
+        if (thread_num > 1) {
+            for (const auto &i : mut_idx) {
+                if(write_flag) bucket_mut[i].lock();
+                else bucket_mut[i].lock_shared();
+            }
+        }
+        #endif
     }
-    void inline bucket_unlock(const std::set<int> &mut_idx) {
+    void inline bucket_unlock(const std::set<int> &mut_idx, bool write_flag) {
+        #ifndef RW_LOCK_RACE
         if (thread_num > 1) {
             for (const auto &i : mut_idx)
                 bucket_mut[i].unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_RACE
+        if (thread_num > 1) {
+            for (const auto &i : mut_idx) {
+                if(write_flag) bucket_mut[i].unlock();
+                else bucket_mut[i].unlock_shared();
+            }
+        }
+        #endif
     }
 
     /* function to lock and unlock stash */
-    void inline stash_lock() {
+    void inline stash_lock(bool write_flag) {
+        #ifndef RW_LOCK_RACE
         if (thread_num > 1) {
             stash_mut.lock();
         }
+        #endif
+
+        #ifdef RW_LOCK_RACE
+        if (thread_num > 1) {
+            if(write_flag) stash_mut.lock();
+            else stash_mut.lock_shared();
+        }
+        #endif
     }
-    void inline stash_unlock() {
+    void inline stash_unlock(bool write_flag) {
+        #ifndef RW_LOCK_RACE
         if (thread_num > 1) {
             stash_mut.unlock();
         }
+        #endif
+
+        #ifdef RW_LOCK_RACE
+        if (thread_num > 1) {
+            if(write_flag) stash_mut.unlock();
+            else stash_mut.unlock_shared();
+        }
+        #endif
     }
 
     void initialize_hash_functions(){
@@ -140,16 +208,16 @@ private:
 
     // insert an full entry to stash
     bool insert_to_stash(const Entry& entry) {
-		stash_lock();
+		stash_lock(true);
         if(stash_num >= STASH_SIZE_RACE) {
-			stash_unlock();
+			stash_unlock(true);
             return false;
 		}
         std::string skey(entry.key, KEY_LEN);
         std::string sval(entry.val, VAL_LEN);
         stash.emplace(skey, sval);
         stash_num++;
-		stash_unlock();
+		stash_unlock(true);
         return true;
     }
 
@@ -194,7 +262,7 @@ private:
         }
         return -1;
     }*/
-    
+
     /* New version, check in the buckets read from the remote
      * given a key, check whether table has key in group g, 
      * return cell number if in main bucket, 
@@ -244,7 +312,7 @@ public:
         int h2_idx2 = (h2%2==0) ? (h2_idx1+1) : (h2_idx1-1);
 
         std::set<int> mut_idx({h1_idx1,h1_idx2,h2_idx1,h2_idx2});
-        bucket_lock(mut_idx);
+        bucket_lock(mut_idx, true);
 
         /* RDMA read: table, bucket h1_idx1, h1_idx2, h2_idx1, h2_idx2*/
         /* NOTICE: this is only for simulation*/
@@ -257,7 +325,7 @@ public:
         //check collision
         if(check_in_table(h1, entry.key, tmp_bucket[0]) != -1 || check_in_table(h2, entry.key, tmp_bucket[1]) != -1) { 
             //collision happen
-            bucket_unlock(mut_idx);
+            bucket_unlock(mut_idx, true);
 
             if(insert_to_stash(entry))
                 return true;
@@ -275,7 +343,7 @@ public:
                 table.cell[h1_idx1]++;
                 if(table.cell[h1_idx1] == N);
 
-				bucket_unlock(mut_idx);
+				bucket_unlock(mut_idx, true);
                 return true;
             }
             //then the overflow bucket
@@ -287,11 +355,11 @@ public:
                 table.cell[h1_idx2]++;
                 if(table.cell[h1_idx2] == N);
 
-				bucket_unlock(mut_idx);
+				bucket_unlock(mut_idx, true);
                 return true;
             }
             //error
-			bucket_unlock(mut_idx);
+			bucket_unlock(mut_idx, true);
             return false;
         }
         //if h2 has empty cell, insert key into group 2
@@ -305,7 +373,7 @@ public:
                 table.cell[h2_idx1]++;
                 if(table.cell[h2_idx1] == N);
 
-				bucket_unlock(mut_idx);
+				bucket_unlock(mut_idx, true);
                 return true;
             }
             //then the overflow bucket
@@ -317,15 +385,15 @@ public:
                 table.cell[h2_idx2]++;
                 if(table.cell[h2_idx2] == N);
 
-				bucket_unlock(mut_idx);
+				bucket_unlock(mut_idx, true);
                 return true;
             }
             //error
-			bucket_unlock(mut_idx);
+			bucket_unlock(mut_idx, true);
             return false;
         }
 
-        bucket_unlock(mut_idx);
+        bucket_unlock(mut_idx, true);
 
         //both group full, insert into stash
         if(insert_to_stash(entry))
@@ -346,7 +414,7 @@ public:
         int h2_idx2 = (h2%2==0) ? (h2_idx1+1) : (h2_idx1-1);
 
         std::set<int> mut_idx({h1,h1_idx1,h1_idx2,h2_idx1,h2_idx2});
-        bucket_lock(mut_idx);
+        bucket_lock(mut_idx, false);
 
         Entry tmp_bucket[2][2*N];
         int b_id[2] = {min(h1_idx1, h1_idx2), min(h2_idx1, h2_idx2)};
@@ -372,7 +440,7 @@ public:
                     return true;
                 }*/
             }
-            bucket_unlock(mut_idx);
+            bucket_unlock(mut_idx, false);
             return true;
         }
 
@@ -394,23 +462,23 @@ public:
                     return true;
                 }*/
             }
-            bucket_unlock(mut_idx);
+            bucket_unlock(mut_idx, false);
             return true;
         }
-		bucket_unlock(mut_idx);
+		bucket_unlock(mut_idx, false);
 
         // query in stash
         std::string skey(key, KEY_LEN);
-		stash_lock();
+		stash_lock(false);
         auto entry = stash.find(skey);
         if(entry != stash.end()) {
             std::string sval = entry->second;
             char* pval = const_cast<char*>(sval.c_str());
             if(val != NULL) memcpy(val, pval, VAL_LEN);
-			stash_unlock();
+			stash_unlock(false);
             return true;
         }
-		stash_unlock();
+		stash_unlock(false);
 
         //miss
         return false;
@@ -429,7 +497,7 @@ public:
         int h2_idx2 = (h2%2==0) ? (h2_idx1+1) : (h2_idx1-1);
 
         std::set<int> mut_idx({h1,h1_idx1,h1_idx2,h2_idx1,h2_idx2});
-        bucket_lock(mut_idx);
+        bucket_lock(mut_idx, true);
 
         Entry tmp_bucket[2][2*N];
         int b_id[2] = {min(h1_idx1, h1_idx2), min(h2_idx1, h2_idx2)};
@@ -450,7 +518,7 @@ public:
                 /* RDMA write: 0 to table, bucket h1_idx2, cell cell-N*/
                 RDMA_write(0, h1_idx2, cell-N, Entry({{0},{0}}), tid);
             }
-            bucket_unlock(mut_idx);
+            bucket_unlock(mut_idx, true);
             return true;
         }
 
@@ -468,22 +536,22 @@ public:
                 /* RDMA write: 0 to table, bucket h2_idx2, cell cell-N*/
                 RDMA_write(0, h2_idx2, cell-N, Entry({{0},{0}}), tid);
             }
-            bucket_unlock(mut_idx);
+            bucket_unlock(mut_idx, true);
             return true;
         }
-		bucket_unlock(mut_idx);
+		bucket_unlock(mut_idx, true);
 
         //query in stash, if find then delete
         std::string skey(key, KEY_LEN);
-		stash_lock();
+		stash_lock(true);
         auto entry = stash.find(skey);
         if(entry != stash.end()) {
             stash.erase(entry);
             stash_num--;
-			stash_unlock();
+			stash_unlock(true);
             return true;
         }
-		stash_unlock();
+		stash_unlock(true);
 
         //miss
         return false;
@@ -503,7 +571,7 @@ public:
         int h2_idx2 = (h2%2==0) ? (h2_idx1+1) : (h2_idx1-1);
 
         std::set<int> mut_idx({h1,h1_idx1,h1_idx2,h2_idx1,h2_idx2});
-        bucket_lock(mut_idx);
+        bucket_lock(mut_idx, true);
 
         Entry tmp_bucket[2][2*N];
         int b_id[2] = {min(h1_idx1, h1_idx2), min(h2_idx1, h2_idx2)};
@@ -522,7 +590,7 @@ public:
                 /* RDMA write: entry.val to table, bucket h1_idx2, cell cell-N*/
                 RDMA_write(0, h1_idx2, cell-N, entry, tid);
             }
-            bucket_unlock(mut_idx);
+            bucket_unlock(mut_idx, true);
             return true;
         }
 
@@ -538,23 +606,23 @@ public:
                 /* RDMA write: entry.val to table, bucket h2_idx2, cell cell-N*/
                 RDMA_write(0, h2_idx2, cell-N, entry, tid);
             }
-            bucket_unlock(mut_idx);
+            bucket_unlock(mut_idx, true);
             return true;
         }
 
-		bucket_unlock(mut_idx);
+		bucket_unlock(mut_idx, true);
 
         // query in stash
-        stash_lock();
+        stash_lock(true);
         std::string skey(entry.key, KEY_LEN);
         auto it = stash.find(skey);
         if(it != stash.end()) {
             std::string sval = entry.val;
             it->second = sval;
-            stash_unlock();
+            stash_unlock(true);
             return true;
         }
-        stash_unlock();
+        stash_unlock(true);
 
         //miss
         return false;
@@ -573,7 +641,13 @@ public:
 
         stash_num = 0;
 
+        #ifndef RW_LOCK_RACE
 		this->bucket_mut = new mutex[this->bucket_number];
+        #endif
+
+        #ifdef RW_LOCK_RACE
+        this->bucket_mut = new shared_mutex[this->bucket_number];
+        #endif
     }
 
     ~RACETable() {
