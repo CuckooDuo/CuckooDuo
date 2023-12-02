@@ -900,10 +900,10 @@ private:
         }
     }
     
-    // std::unordered_map<indexType, indexType, pair_hash> visit[tid];
-    // std::unordered_map<indexType, int, pair_hash> visitStep[tid];
-    std::vector<indexType ***> visit;    // record cell will check
-    std::vector<int ***> visitStep;      // record the number of steps of this visition
+    std::vector<std::unordered_map<indexType, indexType, pair_hash> > visit;
+    std::vector<std::unordered_map<indexType, int, pair_hash> > visitStep;
+    //std::vector<indexType ***> visit;    // record cell will check
+    //std::vector<int ***> visitStep;      // record the number of steps of this visition
     std::vector<std::queue<indexType>> bfsQueue, dirtyList;    // queue for cells will check or checked
     /* Spread bfs with from(current cell) */
     void bfsSpread(indexType from, int tid){
@@ -916,9 +916,11 @@ private:
         int vid = connect_num-1-tid;
         for (int i=0; i<((tableID^1) == TABLE1 ? M : L); i++) if (!table[tableID^1].bucket[altBucketID].fixed[i]){
             indexType target = std::make_pair(std::make_pair(tableID^1, altBucketID), i);
-            if (visit[vid][target.first.first][target.first.second][target.second] != indexTypeNotFound) continue;
-            visit[vid][target.first.first][target.first.second][target.second] = from;
-            visitStep[vid][target.first.first][target.first.second][target.second] = visitStep[vid][from.first.first][from.first.second][from.second] + 1;
+
+            //if (visit[vid][target] != indexTypeNotFound) continue;
+            if (visit[vid].find(target) != visit[vid].end()) continue;
+            visit[vid][target] = from;
+            visitStep[vid][target] = visitStep[vid][from] + 1;
             bfsQueue[vid].push(target);
             dirtyList[vid].push(target);
         }
@@ -929,7 +931,11 @@ private:
         int vid = connect_num-1-tid;
         while (!dirtyList[vid].empty()){
             indexType item = dirtyList[vid].front();
-            visit[vid][item.first.first][item.first.second][item.second] = indexTypeNotFound;
+            //visit[vid][item] = indexTypeNotFound;
+
+            visit[vid].erase(item);
+            visitStep[vid].erase(item);
+            
             dirtyList[vid].pop();
         }
     }
@@ -954,8 +960,8 @@ private:
         if (collID == -1){
             for (int i=0; i<L; i++){
                 indexType target = std::make_pair(std::make_pair(TABLE2, h[TABLE2]), i);
-                visit[vid][target.first.first][target.first.second][target.second] = emptyIndex;
-                visitStep[vid][target.first.first][target.first.second][target.second] = 1;
+                visit[vid][target] = emptyIndex;
+                visitStep[vid][target] = 1;
                 bfsQueue[vid].push(target);
                 dirtyList[vid].push(target);
             }
@@ -964,8 +970,8 @@ private:
         }
         for (int i=0; i<M; i++) if (!current_bucket1->fixed[i]){
             indexType target = std::make_pair(std::make_pair(TABLE1, h[TABLE1]), i);
-            visit[vid][target.first.first][target.first.second][target.second] = emptyIndex;
-            visitStep[vid][target.first.first][target.first.second][target.second] = 1;
+            visit[vid][target] = emptyIndex;
+            visitStep[vid][target] = 1;
             bfsQueue[vid].push(target);
             dirtyList[vid].push(target);
         }
@@ -975,7 +981,7 @@ private:
             indexType from = bfsQueue[vid].front();
             bfsQueue[vid].pop();
             if (from.first.first != 0 && from.first.first != 1) return false;
-            if (visitStep[vid][from.first.first][from.first.second][from.second] > max_kick_number) break;
+            if (visitStep[vid][from] > max_kick_number) break;
             int tableID = from.first.first;
             int bucketID = from.first.second;
             int cellID = from.second;
@@ -995,7 +1001,7 @@ private:
                     indexList[listCnt++] = from;
                     mut_idx.insert(std::make_pair(from.first.first, from.first.second));
 
-                    from = visit[vid][from.first.first][from.first.second][from.second];
+                    from = visit[vid][from];
                     if (from == emptyIndex) break;
                 }
                 // if we can't lock every locks at once, we try another way
@@ -1468,29 +1474,6 @@ public:
             delete [] bucket_mut[i];
             bucket_mut[i] = tmp_mut;
             #endif
-
-            for (int t = 0; t < thread_num; ++t) {
-                indexType **tmp_visit = new indexType*[bucket_number];
-                int **tmp_visitStep = new int*[bucket_number];
-
-                for (int j=0; j<bucket_number; j++){
-                    tmp_visit[j] = new indexType[maxNL];
-                    for (int k = 0; k < maxNL; ++k)
-                        tmp_visit[j][k] = indexTypeNotFound;
-                    tmp_visitStep[j] = new int[maxNL];
-                    memset(tmp_visitStep[j], 0, maxNL*sizeof(int));
-                }
-
-                for (int j=0; j<old_bucket_number; j++) {
-                    delete [] visit[t][i][j];
-                    delete [] visitStep[t][i][j];
-                }
-                delete [] visit[t][i];
-                delete [] visitStep[t][i];
-
-                visit[t][i] = tmp_visit;
-                visitStep[t][i] = tmp_visitStep;
-            }
         }
         // allocate remote resources
         expand_remote(n);
@@ -1585,40 +1568,36 @@ public:
         memset(table[TABLE1].cell, 0, this->bucket_number*sizeof(uint32_t));
         this->table[TABLE2].cell = new uint32_t[this->bucket_number];
         memset(table[TABLE2].cell, 0, this->bucket_number*sizeof(uint32_t));
-        
+
         this->thread_num = thread_num;
         this->connect_num = connect_num;
         for (int tid = 0; tid < thread_num; ++tid) {
             this->visit.push_back({});
-            this->visit[tid] = new indexType**[2];
+            /*this->visit[tid] = new indexType**[2];
             for (int i=0; i<2; i++){
                 this->visit[tid][i] = new indexType*[this->bucket_number];
                 for (int j=0; j<this->bucket_number; j++){
                     this->visit[tid][i][j] = new indexType[maxNL];
                     memset(this->visit[tid][i][j], 0, maxNL*sizeof(indexType));
                 }
-            }
+            }*/
         }
 
         for (int tid = 0; tid < thread_num; ++tid) {
             this->visitStep.push_back({});
-            this->visitStep[tid] = new int**[2];
+            /*this->visitStep[tid] = new int**[2];
             for (int i=0; i<2; i++){
                 this->visitStep[tid][i] = new int*[this->bucket_number];
                 for (int j=0; j<this->bucket_number; j++){
                     this->visitStep[tid][i][j] = new int[maxNL];
                     memset(this->visitStep[tid][i][j], 0, maxNL*sizeof(int));
                 }
-            }
+            }*/
         }
 
         initialize_hash_functions();
 
         stash_num = 0;
-
-        for (int tid = 0; tid < thread_num; ++tid)
-        for (int i=0; i<2; i++) for (int j=0; j<this->bucket_number; j++) for (int k=0; k<maxNL; k++)
-            visit[tid][i][j][k] = indexTypeNotFound;
 
         for (int tid = 0; tid < thread_num; ++tid) {
             this->bfsQueue.push_back({});
@@ -1645,26 +1624,6 @@ public:
 
 		delete [] bucket_mut[TABLE1];
 		delete [] bucket_mut[TABLE2];
-
-        for (int tid = 0; tid < thread_num; ++tid) {
-            for (int i=0; i<2; i++){
-                for (int j=0; j<this->bucket_number; j++){
-                    delete [] visit[tid][i][j];
-                }
-                delete [] visit[tid][i];
-            }
-            delete [] visit[tid];
-        }
-
-        for (int tid = 0; tid < thread_num; ++tid) {
-            for (int i=0; i<2; i++){
-                for (int j=0; j<this->bucket_number; j++){
-                    delete [] visitStep[tid][i][j];
-                }
-                delete [] visitStep[tid][i];
-            }
-            delete [] visitStep[tid];
-        }
     }
 };
 
