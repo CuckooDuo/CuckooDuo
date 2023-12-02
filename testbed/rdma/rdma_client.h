@@ -131,9 +131,9 @@ static int connect_num = 1;
 /* the size of each memory block in remote */
 static uint64_t rlen = (uint64_t)(1<<30);
 /* the number of entries in a block */
-static int cell_num;
+static uint64_t cell_num;
 /* the number of buckets in a table for CuckooDuo */
-static int bucket_num = (1 << 20) / N / 2;
+static uint64_t bucket_num = (1 << 20) / N / 2;
 
 /* buffers for clean in expansion */
 static struct Entry clean_buf[5][N];
@@ -1050,7 +1050,7 @@ static void usage() {
 }
 
 /* Initialize a rdma client with argvs and cell_number */
-int rdma_client_init(int argc, char **argv, int cell_number) {
+int rdma_client_init(int argc, char **argv, uint64_t cell_number) {
   cell_num = cell_number;
   bucket_num = cell_num/N/2;
 
