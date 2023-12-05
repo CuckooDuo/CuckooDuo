@@ -101,35 +101,35 @@ The results will stored in csv files described by `csv_path` in corresponding cp
 
 You can also get more details of each test in corresponding cpp files, and modify test by yourself.
 
-* Comparison of average latency with prior art (Figure 8(a~d))
+* Comparison of average latency with prior art (Figure 7(a~d))
 ```bash
 server@: ./bin/rdma_server -a remote_IP
 
 client@: ./bin/test_latency -a remote_IP
 ```
 
-*  Comparison of average throughput with prior art. (Figure 9(a~d))
+*  Comparison of average throughput with prior art. (Figure 8(a~d))
 ```bash
 server@: ./bin/rdma_server -a remote_IP -n 16
 
 client@: ./bin/test_multi -a remote_IP -n 16
 ```
 
-* Comparison of speed on hybrid workloads (Figure 11(a))
+* Comparison of speed on hybrid workloads (Figure 10(a))
 ```bash
 server@: ./bin/rdma_server -a remote_IP
 
 client@: ./bin/test_hybrid_single -a remote_IP
 ```
 
-* Comparison of speed on hybrid workloads (Figure 11(b))
+* Comparison of speed on hybrid workloads (Figure 10(b))
 ```bash
 server@: ./bin/rdma_server -a remote_IP -n 16
 
 client@: ./bin/test_hybrid_multi -a remote_IP -n 16
 ```
 
-*  Performance of dynamic expansion (Figure 12(b))
+*  Performance of dynamic expansion (Figure 11(b))
 ```bash
 server@: ./bin/rdma_server -a remote_IP
 
