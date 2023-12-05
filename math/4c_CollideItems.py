@@ -1,16 +1,16 @@
 import subprocess
 import csv
 
-testResultDir = "5c.csv";
+testResultDir = "4c.csv";
 
 # 定义一个函数来编译并运行 main.cpp
 def run_with_bucket_size(bucket_size, fp_len):
     # 使用 subprocess 编译 main.cpp
-    compile_command = ["g++", f"-D MY_BUCKET_SIZE={bucket_size}", f"-D MY_FP_LEN={fp_len}", "5b_5c_CollideItems.cpp", "-o", "5b_5c_CollideItems"]
+    compile_command = ["g++", f"-D MY_BUCKET_SIZE={bucket_size}", f"-D MY_FP_LEN={fp_len}", "4b_4c_CollideItems.cpp", "-o", "4b_4c_CollideItems"]
     subprocess.run(compile_command, check=True)
     
     # 运行编译后的 main 程序并捕获输出
-    result = subprocess.run(["./5b_5c_CollideItems"], capture_output=True, text=True).stdout.strip()
+    result = subprocess.run(["./4b_4c_CollideItems"], capture_output=True, text=True).stdout.strip()
     
     # 返回捕获的输出
     return result

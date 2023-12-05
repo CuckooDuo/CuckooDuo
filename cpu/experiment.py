@@ -138,7 +138,7 @@ if __name__ == "__main__":
     header_file_path = cpp_file_path = None
 
     
-    if '6a' in fig:
+    if '5a' in fig:
         header_file_path = "cuckoo_group_bfs_twohash.h"  # Replace with your header file path
         cpp_file_path = "bfs_test_twohash.cpp"  # Replace with your cpp file path
         print(f'header:{header_file_path}\n\
@@ -170,7 +170,7 @@ if __name__ == "__main__":
         filtered_parameters['M'] = 6
         change_parameters(header_file_path, cpp_file_path, **filtered_parameters)
 
-    if '6b' in fig:
+    if '5b' in fig:
         header_file_path = "cuckoo_group_bfs_twohash.h"  # Replace with your header file path
         cpp_file_path = "bfs_test_twohash.cpp"  # Replace with your cpp file path
         print(f'header:{header_file_path}\n\
@@ -198,7 +198,7 @@ if __name__ == "__main__":
         filtered_parameters['SIG_LEN'] = 2
         change_parameters(header_file_path, cpp_file_path, **filtered_parameters)
 
-    if '6c' in fig:
+    if '5c' in fig:
         import pandas as pd
         data = {}
         for f in [8,16,24,32]:
@@ -219,7 +219,7 @@ if __name__ == "__main__":
         write_to_csv(csv_data, "results.csv", "bucket_size")
         filtered_parameters['lib'] = None
 
-    if '6d' in fig:
+    if '5d' in fig:
         header_file_path = "cuckoo_group_bfs_twohash.h"  # Replace with your header file path
         cpp_file_path = "bfs_test_twohash.cpp"  # Replace with your cpp file path
     
@@ -244,7 +244,7 @@ if __name__ == "__main__":
         write_to_csv(csv_data, "results.csv", "table_size")
         filtered_parameters['lib'] = None
 
-    if '6e' in fig:
+    if '5e' in fig:
         header_file_path = "cuckoo_group_bfs_twohash.h"  # Replace with your header file path
         cpp_file_path = "bfs_test_twohash.cpp"  # Replace with your cpp file path
     
@@ -328,7 +328,7 @@ if __name__ == "__main__":
         filtered_data[['load_factor','bfs_avg_move','dfs_avg_move','dfsRandom_avg_move']].to_csv('results.csv', index=False)
         filtered_parameters['lib'] = None
 
-    if '6g' in fig:
+    if '5h' in fig:
         header_file_path = "cuckoo_group_bfs_twohash.h"  # Replace with your header file path
         cpp_file_path = "bfs_test_twohash.cpp"  # Replace with your cpp file path
     
