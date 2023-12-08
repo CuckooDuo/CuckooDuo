@@ -18,4 +18,6 @@ Perfect hashing is a special hash function that ensures a collision-free mapping
 
 * `workload` contains several small sample workloads, which can be directly used to run the codes in this project. We also upload all workloads used in our paper to Google Drive and provide [link](https://drive.google.com/file/d/1Y2WI6RYiPiWq6lNlhOusQbZMW1n89sBC/view?usp=share_link) to download them. All links and materials preserve anonymity.
 
+* `CuckooDuo_Supplementary.pdf` contains the supplementary materials of CuckooDuo.
+
 * More details can be found in the folders.
