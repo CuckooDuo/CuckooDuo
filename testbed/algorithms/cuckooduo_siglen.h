@@ -1,5 +1,5 @@
 /*
- * Class declaraiton and definition for CuckooDuo
+ * Class declaraiton and definition for CuckooDuo with siglen change experiment
  * 
  */
 
@@ -70,20 +70,16 @@ inline std::size_t hash_val(const Types &... args) {
 uint32_t TOTAL_MEMORY_BYTE_USING_CACHE = 0; // 65'000'000
 
 //#define SIG_BIT 16
-//uint32_t SIG_BIT = 16;
+uint32_t SIG_BIT = 16;
 //static_assert((SIG_BIT > 0 && SIG_BIT <= 32), "SIG_BIT must be (0, 32]");
-#define SIG_LEN 2 //((SIG_BIT - 1) / 8 + 1)
-//#define SIG_TYPE uint32_t
-//#define DEFAULT_INVALID_SIG 0xffffffff
-#define DEFAULT_INVALID_SIG 0xffff
-//#define SIG_MASK (SIG_TYPE)((((SIG_TYPE)1) << CK::SIG_BIT) - 1)
+#define SIG_LEN 4 //((SIG_BIT - 1) / 8 + 1)
+#define SIG_TYPE uint32_t
+#define DEFAULT_INVALID_SIG 0xffffffff
+#define SIG_MASK (SIG_TYPE)((((SIG_TYPE)1) << CK::SIG_BIT) - 1)
 
-#ifndef _KV_TYPE_H_
 #define KEY_TYPE uint64_t
 #define VAL_TYPE uint64_t
-#endif
-
-#define SIG_TYPE uint16_t
+//#define SIG_TYPE uint16_t
 #define BOOL_ARR uint8_t
 #define indexType uint32_t
 
@@ -212,9 +208,9 @@ public:
     int thread_num;     // the number of threads we use
     int connect_num;    // the number of threads we have
 
-    int viscnt = 0; // for remote memory access test
+    int viscnt = 0; // for memory access test
 
-    int elecnt = 0; // record the number of elements, for debug
+    int elecnt = 0; // for test
 
 private:
     /* function to lock and unlock buckets */

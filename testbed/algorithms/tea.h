@@ -18,6 +18,7 @@
 #include <mutex>
 #include <shared_mutex>
 #include "../rdma/rdma_client.h"
+#include "SimpleCache.h"
 #pragma once
 
 /* entry parameters */
@@ -32,7 +33,7 @@ struct Entry{
 };
 #endif
 
-//#define RW_LOCK_TEA
+#define RW_LOCK_TEA
 
 /* Define TEA class in namespace TEA */
 namespace TEA {
@@ -43,6 +44,9 @@ namespace TEA {
 #define N 8                 // item(cell) number in a bucket
 #endif
 #define STASH_SIZE_TEA 8192      // size of stash
+
+// if not equal to 0, using cache
+uint32_t TOTAL_MEMORY_BYTE_USING_CACHE = 0; // 65'000'000
 
 struct Bucket{
     /* These should be in remote for real implement */
@@ -83,6 +87,11 @@ public:
     #endif
 
     int thread_num; // the number of threads we use
+
+    int viscnt = 0; // for memory access test
+    int vismax = 0;
+
+    SimpleLRUCache::Cache *cache;
 
 private:
 	/* function to lock and unlock buckets */
@@ -181,7 +190,8 @@ private:
 
     void initialize_hash_functions(){
         std::set<int> seeds;
-        srand((unsigned)time(NULL));
+        //srand((unsigned)time(NULL));
+        srand(20241009);
 
         uint32_t seed = rand()%MAX_PRIME32;
         seed_hash_to_fp = seed;
@@ -223,11 +233,13 @@ private:
         ra[tid][0] = get_offset_table(tableID, bucketID, cellID);
         memcpy(&write_buf[tid][0], &entry, KV_LEN);
         mod_remote(1, tid);
+        ++viscnt;
     }
     // RDMA read, read entry from (table,bucket,cell)
     inline void RDMA_read(Entry &entry, int tableID, int bucketID, int cellID, int tid){
         ra[tid][0] = get_offset_table(tableID, bucketID, cellID);
         get_remote(1, tid);
+        ++viscnt;
         memcpy(&entry, &read_buf[tid][0], KV_LEN);
     }
     // RDMA read, read sz*b_num entries from vec(table,bucket)
@@ -235,6 +247,7 @@ private:
         for (int i = 0; i < sz; ++i)
             ra[tid][i] = get_offset_table(0, bucketID[i], 0);
         get_bucket(b_num, sz, tid);
+        ++viscnt;
         memcpy(entry, bucket_buf[tid].buf, N*2*KV_LEN*sz);
     }
 
@@ -264,6 +277,8 @@ private:
 public:
     /* Insert an entry */
     bool insert(const Entry& entry, int tid) {
+        int vislast = viscnt;
+
         int tries = 0;
         Entry tmp_entry;
         memcpy(tmp_entry.key, entry.key, KEY_LEN*sizeof(char));
@@ -298,6 +313,8 @@ public:
 
             if(check_in_table(h1, tmp_entry.key, tmp_bucket[0]) != -1 || check_in_table(h2, tmp_entry.key, tmp_bucket[1]) != -1) { //collision happen				
                 bucket_unlock(mut_idx, true);
+
+                vismax = max(vismax, viscnt-vislast);
                 if(insert_to_stash(tmp_entry)) {					
                     return true;
 				}
@@ -324,6 +341,7 @@ public:
                     kick_stat[tries]++;*/
                 }
                 bucket_unlock(mut_idx, true);
+                vismax = max(vismax, viscnt-vislast);
                 return true;
             }
             if(table.cell[h2] < N) {  //if h2 has empty cell, insert key into h2
@@ -346,6 +364,7 @@ public:
                     kick_stat[tries]++;*/
                 }
                 bucket_unlock(mut_idx, true);
+                vismax = max(vismax, viscnt-vislast);
                 return true;
             }
             //choose a victim
@@ -373,6 +392,7 @@ public:
         }
         //max kick reached
 		
+        vismax = max(vismax, viscnt-vislast);
         if(insert_to_stash(tmp_entry))
             return true;
         return false;
@@ -380,6 +400,10 @@ public:
 
     /* Query key and put result in val */
     bool query(char *key, char *val, int tid) {
+        if (TOTAL_MEMORY_BYTE_USING_CACHE) {
+            if (cache->query(key, val)) return true;
+        }
+
         //query in table
         int h1 = hash1(key);
         int h2 = (h1 + 1) % bucket_number;
@@ -413,6 +437,10 @@ public:
                 return true;
             }*/
             bucket_unlock(mut_idx, false);
+
+            if (TOTAL_MEMORY_BYTE_USING_CACHE)
+                cache->insert(key, val);
+
             return true;
         }
 
@@ -426,6 +454,10 @@ public:
                 return true;
             }*/
             bucket_unlock(mut_idx, false);
+
+            if (TOTAL_MEMORY_BYTE_USING_CACHE)
+                cache->insert(key, val);
+
             return true;
         }
 		bucket_unlock(mut_idx, false);
@@ -439,6 +471,10 @@ public:
             stash_unlock(false);
             char* pval = const_cast<char*>(sval.c_str());
             if(val != NULL) memcpy(val, pval, VAL_LEN);
+
+            if (TOTAL_MEMORY_BYTE_USING_CACHE)
+                cache->insert(key, val);
+
             return true;
         }
 		stash_unlock(false);
@@ -574,6 +610,173 @@ public:
         return false;
     }
 
+    bool checkInsert(Entry& entry, int tid) {
+        int h1 = hash1(entry.key);
+        int h2 = (h1 + 1) % bucket_number;
+
+        std::set<int> mut_idx({h1,h2});
+        bucket_lock(mut_idx, true);
+
+        // If h1 is next to h2, read once, otherwise twice
+        Entry tmp_buffer[2][2*N];
+        Entry *tmp_bucket[2];
+        if (h1 < h2) {
+            RDMA_read_bucket(tmp_buffer, &h1, 1, 2, tid);
+            tmp_bucket[0] = tmp_buffer[0];
+            tmp_bucket[1] = tmp_buffer[0]+N;
+        }
+        else {
+            int h[2] = {h1,h2};
+            RDMA_read_bucket(tmp_buffer, h, 2, 1, tid);
+            tmp_bucket[0] = tmp_buffer[0];
+            tmp_bucket[1] = tmp_buffer[1];
+        }
+
+        //query in table
+        int cell;
+        cell = check_in_table(h1, entry.key, tmp_bucket[0]);
+        if(cell != -1) {
+            //memcpy(table.bucket[h1].val[cell], entry.val, VAL_LEN);
+            /* RDMA write: entry.val to table, bucket h1, cell cell*/
+            RDMA_write(0, h1, cell, entry, tid);
+            
+			bucket_unlock(mut_idx, true);
+            return true;
+        }
+
+        cell = check_in_table(h2, entry.key, tmp_bucket[1]);
+        if(cell != -1) {
+            //memcpy(table.bucket[h2].val[cell], entry.val, VAL_LEN);
+            /* RDMA write: entry.val to table, bucket h2, cell cell*/
+            RDMA_write(0, h2, cell, entry, tid);
+            
+			bucket_unlock(mut_idx, true);
+            return true;
+        }
+		
+
+        // query in stash
+        std::string skey(entry.key, KEY_LEN);
+		stash_lock(true);
+        auto it = stash.find(skey);
+        if(it != stash.end()) {
+            std::string sval = entry.val;
+            it->second = sval;
+			stash_unlock(true);
+            return true;
+        }
+		stash_unlock(true);
+
+        // if not found, insert
+        int tries = 0;
+        Entry tmp_entry;
+        memcpy(tmp_entry.key, entry.key, KEY_LEN*sizeof(char));
+        memcpy(tmp_entry.val, entry.val, VAL_LEN*sizeof(char));
+        Entry victim;
+
+        // do cuckoo kick
+        while(tries < max_kick_number)
+        {
+            if (tries > 0) {
+                h1 = hash1(tmp_entry.key);
+                h2 = (h1 + 1) % bucket_number; //next bucket is the alternate bucket in TEA.
+            }
+
+            std::set<int> mut_idx_insert({h1,h2});
+            if (tries > 0)
+                bucket_lock(mut_idx_insert, true);
+
+            /* RDMA read: table, bucket h1, h2*/
+            /* NOTICE: this is only for simulation*/
+            // If h1 is next to h2, read once, otherwise twice
+            if (tries > 0) {
+                if (h1 < h2) {
+                    RDMA_read_bucket(tmp_buffer, &h1, 1, 2, tid);
+                    tmp_bucket[0] = tmp_buffer[0];
+                    tmp_bucket[1] = tmp_buffer[0]+N;
+                }
+                else {
+                    int h[2] = {h1,h2};
+                    RDMA_read_bucket(tmp_buffer, h, 2, 1, tid);
+                    tmp_bucket[0] = tmp_buffer[0];
+                    tmp_bucket[1] = tmp_buffer[1];
+                }
+            }
+
+            if(table.cell[h1] < N) {  //if h1 has empty cell, insert key into h1
+                for(int i = 0; i < N; i++ ) {
+                    if(!table.bucket[h1].full[i]) {
+                        //memcpy(table.bucket[h1].key[i], tmp_entry.key, KEY_LEN*sizeof(char));
+                        //memcpy(table.bucket[h1].val[i], tmp_entry.val, VAL_LEN*sizeof(char));
+                        /* RDMA write: tmp_entry to table, bucket h1, cell i*/
+                        RDMA_write(0, h1, i, tmp_entry, tid);
+
+                        table.bucket[h1].full[i] = true;
+                        break;
+                    }
+                }
+                table.cell[h1]++;
+                if(table.cell[h1] == N);  //fullbucket_num++;
+                if(tries > 0) {
+                    /*kick_num++;
+                    kick_success_num++;
+                    kick_stat[tries]++;*/
+                }
+                bucket_unlock(mut_idx_insert, true);
+                return true;
+            }
+            if(table.cell[h2] < N) {  //if h2 has empty cell, insert key into h2
+                for(int i = 0; i < N; i++ ) {
+                    if(!table.bucket[h2].full[i]) {
+                        //memcpy(table.bucket[h2].key[i], tmp_entry.key, KEY_LEN*sizeof(char));
+                        //memcpy(table.bucket[h2].val[i], tmp_entry.val, VAL_LEN*sizeof(char));
+                        /* RDMA write: tmp_entry to table, bucket h2, cell i*/
+                        RDMA_write(0, h2, i, tmp_entry, tid);
+
+                        table.bucket[h2].full[i] = true;
+                        break;
+                    }
+                }
+                table.cell[h2]++;
+                if(table.cell[h2] == N);  //fullbucket_num++;
+                if(tries > 0) {
+                    /*kick_num++;
+                    kick_success_num++;
+                    kick_stat[tries]++;*/
+                }
+                bucket_unlock(mut_idx_insert, true);
+                return true;
+            }
+            //choose a victim
+            //int tmptable = (rand() % 2 == 0)?h1:h2;
+            int tmptable = rand() % 2;
+            int tmpcell = rand() % N;
+            //victim 
+            //memcpy(victim.key, table.bucket[tmptable].key[tmpcell], KEY_LEN*sizeof(char));
+            //memcpy(victim.val, table.bucket[tmptable].val[tmpcell], VAL_LEN*sizeof(char));
+            memcpy(victim.key, tmp_bucket[tmptable][tmpcell].key, KEY_LEN*sizeof(char));
+            memcpy(victim.val, tmp_bucket[tmptable][tmpcell].val, VAL_LEN*sizeof(char));
+            //insert tmp_entry
+            //memcpy(table.bucket[tmptable].key[tmpcell], tmp_entry.key, KEY_LEN*sizeof(char));
+            //memcpy(table.bucket[tmptable].val[tmpcell], tmp_entry.val, VAL_LEN*sizeof(char));
+            /* RDMA write: tmp_entry to table, bucket tmptable, cell tmpcell*/
+            tmptable = (tmptable == 0)?h1:h2;
+            RDMA_write(0, tmptable, tmpcell, tmp_entry, tid);
+
+            //tmp_entry = victim
+            memcpy(tmp_entry.key, victim.key, KEY_LEN*sizeof(char));
+            memcpy(tmp_entry.val, victim.val, VAL_LEN*sizeof(char));
+        
+            tries++;
+            bucket_unlock(mut_idx_insert, true);
+        }
+        //max kick reached
+		
+        if(insert_to_stash(tmp_entry))
+            return true;
+        return false;       
+    }
+
     TEATable(int cell_number, int max_kick_num, int thread_num) {
         this->thread_num = thread_num;
         this->bucket_number = cell_number/N;
@@ -594,6 +797,11 @@ public:
         #ifdef RW_LOCK_TEA
         this->bucket_mut = new shared_mutex[this->bucket_number];
         #endif
+
+        if (TOTAL_MEMORY_BYTE_USING_CACHE) {
+            int cache_memory = TOTAL_MEMORY_BYTE_USING_CACHE - 0;
+            cache = new SimpleLRUCache::Cache(cache_memory);
+        }
     }
 
     ~TEATable() {
