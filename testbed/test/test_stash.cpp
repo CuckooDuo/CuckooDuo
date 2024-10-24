@@ -1,6 +1,6 @@
 /* 
  * A test program for query latency with different stash sizes
- * Query with different stash sizes (Figure 10(k))
+ * Query with different stash sizes (Figure 7(k))
  */
 #include <iostream>
 #include <cmath>
