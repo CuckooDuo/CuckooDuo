@@ -136,8 +136,8 @@ static uint64_t cell_num;
 static uint64_t bucket_num = (1 << 20) / N / 2;
 
 /* buffers for clean in expansion */
-static struct Entry clean_buf[5][N];
-static struct ibv_mr *clean_mr;
+static struct Entry clean_buf[2][5][N];
+static struct ibv_mr *clean_mr[2];
 
 /* record tcp server address */
 static int tcp_server_addr = 0;
@@ -173,13 +173,13 @@ static inline int set_tcp_client() {
 
 
 /* Get five buckets for cleaning table locally */
-static inline int get_clean_info() {
+static inline int get_clean_info(int num = 5) {
   struct ibv_wc wc;
   int ret = -1;
 
-  client_send_sge[connect_num-1].addr = (uint64_t)clean_mr->addr;
-  client_send_sge[connect_num-1].length = (uint64_t)clean_mr->length;
-  client_send_sge[connect_num-1].lkey = clean_mr->lkey;
+  client_send_sge[connect_num-1].addr = (uint64_t)clean_mr[0]->addr;
+  client_send_sge[connect_num-1].length = (uint64_t)clean_mr[0]->length/5*num;
+  client_send_sge[connect_num-1].lkey = clean_mr[0]->lkey;
   /* now we link to the send work request */
   bzero(&client_send_wr[connect_num-1], sizeof(client_send_wr[connect_num-1]));
   client_send_wr[connect_num-1].sg_list = &client_send_sge[connect_num-1];
@@ -207,10 +207,54 @@ static inline int get_clean_info() {
   return ret;
 }
 
+/* For expand2 */
+static inline int mod_clean_info(int num = 5) {
+  struct ibv_wc wc[2];
+  int ret = -1;
+
+  for (int j = 0; j < 2; ++j) {
+    client_send_sge[connect_num-1].addr = (uint64_t)clean_mr[j]->addr;
+    client_send_sge[connect_num-1].length = (uint64_t)clean_mr[j]->length/5*num;
+    client_send_sge[connect_num-1].lkey = clean_mr[j]->lkey;
+    /* now we link to the send work request */
+    bzero(&client_send_wr[connect_num-1], sizeof(client_send_wr[connect_num-1]));
+    client_send_wr[connect_num-1].sg_list = &client_send_sge[connect_num-1];
+    client_send_wr[connect_num-1].num_sge = 1;
+    client_send_wr[connect_num-1].opcode = IBV_WR_RDMA_WRITE;
+    client_send_wr[connect_num-1].send_flags = IBV_SEND_SIGNALED;
+    /* we have to tell server side info for RDMA */
+    client_send_wr[connect_num-1].wr.rdma.rkey = server_metadata_attr[ra[0][j].idx][connect_num-1].stag.remote_stag;
+    client_send_wr[connect_num-1].wr.rdma.remote_addr = server_metadata_attr[ra[0][j].idx][connect_num-1].address+ra[0][j].offset;
+
+    //cout << hex << client_send_wr[connect_num-1].wr.rdma.remote_addr << endl;
+    //cout << client_send_wr[connect_num-1].wr.rdma.rkey << endl;
+
+    /* Now we post it */  
+    ret = ibv_post_send(client_qp[connect_num-1], &client_send_wr[connect_num-1], &bad_client_send_wr[connect_num-1]);
+    if (ret) {
+      rdma_error("Failed to write client clean buffer, errno: %d \n", -errno);
+      return -errno;
+    }
+  }
+
+  ret = my_process_work_completion_events(cq_ptr[connect_num-1], wc, 2);
+
+  if (ret != 2) {
+    rdma_error("We failed to get 2 work completions , ret = %d \n", ret);
+    return ret;
+  }
+
+  return ret;
+}
+
 /* Extend remote memory to n times */
-static inline int expand_remote(int n) {
+static inline int expand_remote(int n, int copyFlag = 0) {
   int old_sz = server_metadata_mr.size();
-  int new_sz = n*old_sz;
+  int new_sz;
+  if (copyFlag != 3)
+  new_sz = n*old_sz;
+  else
+  new_sz = old_sz+1;
 
   struct ibv_wc wc;
   int ret = -1;
@@ -291,23 +335,32 @@ static inline int expand_remote(int n) {
 }
 
 /* Calculate the location in remote corresponding to lacal one */
-static inline RemoteAddr get_offset_table(int table_i, int bucket_i, int cell_i, int ex_flag=0) {
+static inline RemoteAddr get_offset_table(int table_i, int bucket_i, int cell_i, int type=0) {
   RemoteAddr ra;
 
-  if (!ex_flag) {
-    ra.idx = 0;
-    ra.offset = table_i *(cell_num/2)*(KV_LEN);
-    ra.offset += bucket_i*N*KV_LEN;
+  if (type == 0) {
+    ra.idx = bucket_i/(cell_num/N);
+
+    ra.offset = 0;
+    ra.offset += (bucket_i%(cell_num/N))*N*KV_LEN;
     ra.offset += cell_i*(KV_LEN);
   }
-  else {
+  else if (type == 1) {
   	ra.idx = bucket_i/(cell_num/2/N);
 
     ra.offset = table_i *(cell_num/2)*(KV_LEN);
     ra.offset += (bucket_i%(cell_num/2/N))*N*(KV_LEN);
     ra.offset += cell_i*(KV_LEN);
   }
+  else if (type == 2) {
+    ra.idx = server_metadata_mr.size()-1;
 
+    ra.offset = 0;
+    ra.offset += (bucket_i)*N*KV_LEN;
+    ra.offset += cell_i*(KV_LEN);
+  }
+
+  ra.offset %= (rlen);
   return ra;
 }
 
@@ -762,15 +815,17 @@ static int client_xchange_metadata_with_server(int i) {
 
 	// for NO.i conneciton
 	if (i == connect_num-1) {
-		clean_mr =
-    	  rdma_buffer_register(pd[i], clean_buf,
-      	                     sizeof(struct Entry)*N*5,
-        	                   (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
-          	                 IBV_ACCESS_REMOTE_WRITE));
-  	if (!clean_mr) {
-    	rdma_error("Failed to register the clean buffer, ret = %d \n", ret);
-    	return ret;
-  	}
+    for (int j = 0; j < 2; ++j) {
+		  clean_mr[j] =
+      	  rdma_buffer_register(pd[i], clean_buf[j],
+        	                     sizeof(struct Entry)*N*5,
+          	                   (IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
+            	                 IBV_ACCESS_REMOTE_WRITE));
+  	  if (!clean_mr[j]) {
+      	rdma_error("Failed to register the clean buffer, ret = %d \n", ret);
+      	return ret;
+  	  }
+    }
 	}
 
 	// for buckets buffer of MapEmbed

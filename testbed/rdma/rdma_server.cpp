@@ -39,9 +39,17 @@ void *tcp_thread(void *args) {
     ret = recv(client, msg, sizeof(msg), 0);
     if (ret > 0) {
       string strmsg = string(msg);
-      if (strmsg == "expand") {
-        // Get into the state for expansion
-        expand();
+      if (strmsg == "expand3") {
+        // Get into the state for MapEmbed expansion
+        expand(3);
+      }
+      else if (strmsg == "expand2") {
+        // Get into the state for RACE expansion
+        expand(2);
+      }
+      else if (strmsg == "expand") {
+        // Get into the state for CuckooDuo expansion
+        expand(0);
       }
       else if (strmsg == "zero") {
         // Set whole remote memory to zero

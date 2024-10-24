@@ -4,6 +4,7 @@
  */
 
 #include "rdma_common.h"
+#include <iostream>
 #include <chrono>
 #include <vector>
 
@@ -49,7 +50,7 @@ static inline int set_mr_zero() {
 }
 
 /* Extend remote memory with info from client */
-static inline int expand() {
+static inline int expand(int copyFlag = 0) {
   struct ibv_wc wc;
   int ret = -1;
 	int n = 1;
@@ -78,10 +79,20 @@ static inline int expand() {
 	 * Then we could have new_sz = old_sz*n,
 	 * and allocate new_sz-old_sz blocks for expansion
 	 */
+  timespec time1, time2;
+  long long resns;
+  clock_gettime(CLOCK_MONOTONIC, &time1);
+
   n = client_metadata_attr[connect_num-1].length;
 	//printf("%d\n", n);
   int old_sz = server_metadata_mr.size();
-  int new_sz = n*old_sz;
+  int new_sz;
+  if (copyFlag != 3)
+    // CuckooDuo and RACE allocate old_sz blocks each time
+    new_sz = n*old_sz;
+  else
+    // Mapembed allocates a new block with new_sz each time
+    new_sz = old_sz+1;
 
   for (int i = 0; i < connect_num; ++i) {
 
@@ -96,7 +107,13 @@ static inline int expand() {
   	  server_buffer_mr[j].push_back({});
       server_metadata_mr[j].push_back({});
 
-  	  server_metadata_attr[j][i].length = server_metadata_attr[0][i].length;
+      if (copyFlag != 3)
+        // CuckooDuo and RACE allocate old_sz blocks each time
+  	    server_metadata_attr[j][i].length = server_metadata_attr[j-1][i].length;
+      else
+        // Mapembed allocates a new block with new_sz each time
+        server_metadata_attr[j][i].length = server_metadata_attr[j-1][i].length*2;
+
   	  if (i == 0) {
 				// only allocate once
   			server_buffer.push_back({});
@@ -132,6 +149,47 @@ static inline int expand() {
   	    /* we assume that this is due to out of memory error */
   	    return -ENOMEM;
   	  }
+      
+      if (i == 0) {
+				// only copy once
+        if (copyFlag == 0) {
+          // CuckooDuo: copy the old block to the new
+				  memcpy((void*)server_metadata_attr[j][i].address,
+  	           	 (void*)server_metadata_attr[j%old_sz][i].address,
+  	           	 server_metadata_attr[j][i].length);
+        }
+        /*
+        else if (copyFlag == 2) {
+          RACE doesn't neet copy, do nothing
+        }
+        */
+        else if (copyFlag == 3) {
+          // MapEmbed: copy the old memory region twice to the new memory region, and clean the old memory
+          int cell_hash = 16;
+          int bucket_len = 16*8;
+          int bucket_number = server_metadata_attr[j-1][i].length/bucket_len;
+          int page_size = bucket_number / cell_hash;
+
+          void* bucket = (void*)(server_metadata_attr[j-1][i].address);
+          void* bucket_new = (void*)(server_metadata_attr[j][i].address);
+
+          for (int i = 0; i < cell_hash; ++i) {
+            memcpy(bucket_new + (i*page_size*2)*bucket_len, bucket + (i*page_size)*bucket_len, bucket_len*page_size);
+            memcpy(bucket_new + (i*page_size*2 + page_size)*bucket_len, bucket + (i*page_size)*bucket_len, bucket_len*page_size);
+          }
+
+          if (cell_hash*page_size < bucket_number) {
+              int tmp_len = bucket_number-cell_hash*page_size;
+              memcpy(bucket_new + (cell_hash*page_size*2)*bucket_len, bucket + (cell_hash*page_size)*bucket_len, bucket_len*(tmp_len));
+              memcpy(bucket_new + (cell_hash*page_size*2 + tmp_len)*bucket_len, bucket + (cell_hash*page_size)*bucket_len, bucket_len*(tmp_len));
+          }
+
+          // We should free the old memory in real scene, we just ignore this in test
+        }
+
+				printf("tid: %d, MR[%d]:\n", i, j);
+  			show_rdma_buffer_attr(&server_metadata_attr[j][i]);	
+			}
 
   	  server_send_sge[i].addr = (uint64_t)&server_metadata_attr[j][i];
   	  server_send_sge[i].length = sizeof(server_metadata_attr[j][i]);
@@ -157,21 +215,16 @@ static inline int expand() {
   	    return ret;
   	  }
   	  debug("Local buffer metadata has been sent to the client \n");
-
-	  	if (i == 0) {
-				// only copy once
-				memcpy((void*)server_metadata_attr[j][i].address,
-  	         	 (void*)server_metadata_attr[j%old_sz][i].address,
-  	         	 server_metadata_attr[j][i].length);
-				printf("tid: %d, MR[%d]:\n", i, j);
-  			show_rdma_buffer_attr(&server_metadata_attr[j][i]);	
-			}
   	}
   }
 
+  clock_gettime(CLOCK_MONOTONIC, &time2);
+  resns = (long long)(time2.tv_sec - time1.tv_sec) * 1000000000LL + (time2.tv_nsec - time1.tv_nsec);
+  double regist_time = resns/1e9;
+  std::cout << "Regist finished: " << regist_time << std::endl;
+
   return 0;
 }
-
 
 /* When we call this function cm_client_id must be set to a valid identifier.
  * This is where, we prepare client connection before we accept it. This
