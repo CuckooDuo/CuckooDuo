@@ -1,13 +1,13 @@
 import subprocess
 import csv
 
-def run_4a():
-    compile_command = ["g++", "4a_SingleCollide.cpp", "-o", "4a_SingleCollide"]
+def run_6a():
+    compile_command = ["g++", "6a_SingleCollide.cpp", "-o", "6a_SingleCollide"]
     subprocess.run(compile_command, check=True)
     
-    result = subprocess.run(["./4a_SingleCollide"], capture_output=True, text=True).stdout.strip()
+    result = subprocess.run(["./6a_SingleCollide"], capture_output=True, text=True).stdout.strip()
     
     return result
 
-run_4a()
-print("Results saved to 4a.csv")
+run_6a()
+print("Results saved to 6a.csv")
