@@ -12,6 +12,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+#include "SimpleCache.h"
+#endif
 
 
 // begin kv pair
@@ -93,6 +96,10 @@ public:
     uint32_t seed_hash_to_cell[MAX_LAYER];
     uint32_t seed_hash_to_bucket[M];
     uint32_t seed_hash_to_guide;
+
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+    SimpleLRUCache::Cache *cache;
+#endif
 
 // below are print status
 public:
@@ -275,6 +282,9 @@ private:
         return false;
 
 #else        
+        // read bucket
+        RDMA_read_num++;
+        RDMA_read_num2+=N;
        int used = bucket[d].used;
        for(int i = 0; i < used; ++i){
            if(memcmp(bucket[d].key[i], key, KEY_LEN*sizeof(char)) == 0){
@@ -342,6 +352,14 @@ public:
         for(int i = 1; i < cell_layer; ++i)
             cell_offset[i] = cell_offset[i-1] + cell_number[i-1];
         initialize_hash_functions();
+
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+        int total_cell_memory = 0;
+        for(int i = 0; i < cell_layer; ++i)
+            total_cell_memory += cell_number[i];
+        int cache_memory = TOTAL_MEMORY_BYTE_USING_CACHE - total_cell_memory * 0.5; // each cell 4 bits
+        cache = new SimpleLRUCache::Cache(cache_memory);
+#endif
 
         bucket_items = 0;
 
@@ -432,12 +450,23 @@ public:
     }
 
     bool query(const char *key, char* value = NULL){
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+        if (cache->query(key, value)) return true;
+#endif
         for(int layer = 0; layer < cell_layer; ++layer){
             int k = calculate_cell(key, layer);
             if(cell[layer][k] == cell_full)
                 continue;
             int d = calculate_bucket(key, layer, k);
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+            bool result = query_key_in_bucket(key, d, value);
+            auto tmpVal = new char[8];
+            cache->insert(key, tmpVal); // Performance Testing Ignores Accuracy
+            delete [] tmpVal;
+            return result;
+#else
             return query_key_in_bucket(key, d, value);
+#endif
         }
         return false;
     }
@@ -490,6 +519,18 @@ public:
         calculate_bucket_items();
         int bucket_slots = bucket_number * N;
         return (double)bucket_items / bucket_slots;
+    }
+
+    void clear_counters(){
+        move_num = 0;
+        sum_move_num = 0;
+        max_move_num = 0;
+        RDMA_read_num = 0;
+        sum_RDMA_read_num = 0;
+        max_RDMA_read_num = 0;
+        RDMA_read_num2 = 0;
+        sum_RDMA_read_num2 = 0;
+        max_RDMA_read_num2 = 0;
     }
 };
 

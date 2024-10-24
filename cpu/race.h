@@ -11,6 +11,9 @@
 #include <stack>
 #include <unordered_map>
 // #include "../rdma/rdma_client.h"
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+#include "SimpleCache.h"
+#endif
 #pragma once
 
 /* entry parameters */
@@ -27,7 +30,7 @@ struct Entry{
 /* table parameters */
 #define N MY_BUCKET_SIZE    // item(cell) number in a bucket
 #define SIG_LEN 2           // sig(fingerprint) length: 16 bit
-#define TCAM_SIZE 64        // size of TCAM
+#define TCAM_SIZE 5        // size of TCAM
 
 struct Bucket{
     char key[N][KEY_LEN];   //keys are put in here
@@ -55,6 +58,10 @@ public:
     int collision_num;
     int fullbucket_num;
     int tcam_num;
+
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+    SimpleLRUCache::Cache *cache;
+#endif
     
     int move_num, max_move_num, sum_move_num; 
     int RDMA_read_num, max_RDMA_read_num, sum_RDMA_read_num; 
@@ -249,6 +256,9 @@ public:
 
     //query result put in val
     bool query(char *key, char *val = NULL) {
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+        if (cache->query(key, val)) return true;
+#endif
 
         Entry tmp_entry1[2*N];
         Entry tmp_entry2[2*N];
@@ -259,7 +269,9 @@ public:
         int h1_idx2 = (h1%2==0) ? (h1_idx1+1) : (h1_idx1-1);
 
         // Two buckets need read once
-        RDMA_read_bucket(tmp_entry1, 0, std::min(h1_idx1, h1_idx2), 2);
+        // RDMA_read_bucket(tmp_entry1, 0, std::min(h1_idx1, h1_idx2), 2);
+        // 1 RTT instead of 2
+        RDMA_read_bucket(tmp_entry1, 0, std::min(h1_idx1, h1_idx2), 4);
 
         int cell;
         cell = check_in_table(h1, key);
@@ -282,6 +294,11 @@ public:
                     return true;
                 }*/
             }
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+            auto tmpVal = new char[8];
+            cache->insert(key, tmpVal); // Performance Testing Ignores Accuracy
+            delete [] tmpVal;
+#endif
             return true;
         }
 
@@ -291,7 +308,7 @@ public:
         int h2_idx2 = (h2%2==0) ? (h2_idx1+1) : (h2_idx1-1);
 
         // Two buckets need read once
-        RDMA_read_bucket(tmp_entry2, 0, std::min(h2_idx1, h2_idx1), 2);
+        // RDMA_read_bucket(tmp_entry2, 0, std::min(h2_idx1, h2_idx1), 2);
 
         cell = check_in_table(h2, key);
         if(cell != -1) {
@@ -313,6 +330,11 @@ public:
                     return true;
                 }*/
             }
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+            auto tmpVal = new char[8];
+            cache->insert(key, tmpVal); // Performance Testing Ignores Accuracy
+            delete [] tmpVal;
+#endif
             return true;
         }
 
@@ -323,6 +345,11 @@ public:
             std::string sval = entry->second;
             char* pval = const_cast<char*>(sval.c_str());
             if(val != NULL) memcpy(val, pval, VAL_LEN);
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+            auto tmpVal = new char[8];
+            cache->insert(key, tmpVal); // Performance Testing Ignores Accuracy
+            delete [] tmpVal;
+#endif
             return true;
         }
 
@@ -490,6 +517,18 @@ public:
         return false;
     }
 
+    void clear_counters(){
+        move_num = 0;
+        sum_move_num = 0;
+        max_move_num = 0;
+        RDMA_read_num = 0;
+        sum_RDMA_read_num = 0;
+        max_RDMA_read_num = 0;
+        RDMA_read_num2 = 0;
+        sum_RDMA_read_num2 = 0;
+        max_RDMA_read_num2 = 0;
+    }
+
     RACETable(int cell_number) {
         this->bucket_number = cell_number/N;
         this->group_number = this->bucket_number/3*2;
@@ -503,6 +542,11 @@ public:
         collision_num = 0;
         fullbucket_num = 0;
         tcam_num = 0;
+
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+        int cache_memory = TOTAL_MEMORY_BYTE_USING_CACHE - 0;
+        cache = new SimpleLRUCache::Cache(cache_memory);
+#endif
         
         move_num = max_move_num = sum_move_num = 0;
         RDMA_read_num = max_RDMA_read_num = sum_RDMA_read_num = 0;

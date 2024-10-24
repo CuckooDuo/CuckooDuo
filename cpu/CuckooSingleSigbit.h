@@ -29,9 +29,11 @@ struct Entry{
 Entry emptyEntry;
 // Entry RDMAmap[2][1876000][8];
 
+#define SIG_MASK ((1ll << SIG_BIT) - 1)
+
 /* table parameters */
 #define N MY_BUCKET_SIZE    // item(cell) number in a bucket
-#define SIG_LEN 2           // sig(fingerprint) length: 16 bit
+#define SIG_LEN 4           // sig(fingerprint) length: 16 bit
 #define TCAM_SIZE 3500      // size of TCAM
 #define TABLE1 0            // index of table1
 #define TABLE2 1            // index of table2
@@ -126,7 +128,7 @@ private:
     }
 
     int calculate_fp(const char *key) {
-        return MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp) % (1 << (SIG_LEN * 8));
+        return MurmurHash3_x86_32(key, KEY_LEN, seed_hash_to_fp) & SIG_MASK;
     }
 
     // return hash of sig(fp), used for alternate index.
@@ -540,6 +542,10 @@ public:
         RDMA_read_num2 = 0;
         sum_RDMA_read_num2 = 0;
         max_RDMA_read_num2 = 0;
+    }
+
+    int full_bpk(){
+        return SIG_BIT + 32;
     }
 
     CuckooHashTable(int cell_number, int max_kick_num) {

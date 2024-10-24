@@ -11,6 +11,9 @@
 #include <stack>
 #include <unordered_map>
 // #include "../rdma/rdma_client.h"
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+#include "SimpleCache.h"
+#endif
 #pragma once
 
 /* entry parameters */
@@ -58,6 +61,10 @@ public:
     int fullbucket_num;
     int tcam_num;
     uint32_t *kick_stat;
+
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+    SimpleLRUCache::Cache *cache;
+#endif
 
     int move_num, max_move_num, sum_move_num; 
     int RDMA_read_num, max_RDMA_read_num, sum_RDMA_read_num; 
@@ -254,6 +261,9 @@ public:
 
     //query result put in val
     bool query(char *key, char *val = NULL) {
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+        if (cache->query(key, val)) return true;
+#endif
 
         //query in table
         int h1 = hash1(key);
@@ -280,6 +290,11 @@ public:
                 //memcpy(val, &read_buf[0].val, PTR_LEN);
                 return true;
             }*/
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+            auto tmpVal = new char[8];
+            cache->insert(key, tmpVal); // Performance Testing Ignores Accuracy
+            delete [] tmpVal;
+#endif
             return true;
         }
 
@@ -296,6 +311,11 @@ public:
                 //memcpy(val, &read_buf[0].val, PTR_LEN);
                 return true;
             }*/
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+            auto tmpVal = new char[8];
+            cache->insert(key, tmpVal); // Performance Testing Ignores Accuracy
+            delete [] tmpVal;
+#endif
             return true;
         }
 
@@ -306,6 +326,11 @@ public:
             std::string sval = entry->second;
             char* pval = const_cast<char*>(sval.c_str());
             if(val != NULL) memcpy(val, pval, VAL_LEN);
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+            auto tmpVal = new char[8];
+            cache->insert(key, tmpVal); // Performance Testing Ignores Accuracy
+            delete [] tmpVal;
+#endif
             return true;
         }
 
@@ -433,6 +458,18 @@ public:
         return false;
     }
 
+    void clear_counters(){
+        move_num = 0;
+        sum_move_num = 0;
+        max_move_num = 0;
+        RDMA_read_num = 0;
+        sum_RDMA_read_num = 0;
+        max_RDMA_read_num = 0;
+        RDMA_read_num2 = 0;
+        sum_RDMA_read_num2 = 0;
+        max_RDMA_read_num2 = 0;
+    }
+
     TEATable(int cell_number, int max_kick_num) {
         this->bucket_number = cell_number/N;
         this->max_kick_number = max_kick_num;
@@ -450,6 +487,11 @@ public:
         kick_success_num = 0;
         this->kick_stat = new uint32_t[max_kick_num+1];
         memset(kick_stat, 0, (max_kick_num+1)*sizeof(uint32_t));
+
+#ifdef TOTAL_MEMORY_BYTE_USING_CACHE
+        int cache_memory = TOTAL_MEMORY_BYTE_USING_CACHE - 0;
+        cache = new SimpleLRUCache::Cache(cache_memory);
+#endif
         
         move_num = max_move_num = sum_move_num = 0;
         RDMA_read_num = max_RDMA_read_num = sum_RDMA_read_num = 0;

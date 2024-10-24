@@ -5,20 +5,13 @@
 #include <ctime>
 #include <map>
 #include <iomanip> // Include <iomanip> for setw
-#include <chrono>
-#include <assert.h>
-
-// #define TOTAL_MEMORY_BYTE_USING_CACHE (64 * 1024 * 1024)
 
 #ifndef MY_BUCKET_SIZE
 #define MY_BUCKET_SIZE 8
 #endif
 
 // #include "CuckooDuo.h"
-// #include "CuckooDuoFast.h"
-// #include "CuckooDuoNew.h"
-#include "CuckooDuoNewLessFPCalc.h"
-// #include "CuckooDuoSIGLEN.h"
+#include "CuckooDuoFast.h"
 #include "MapEmbed.h"
 #include "tea.h"
 #include "race.h"
@@ -29,7 +22,7 @@ using namespace std;
 const string inputFilePath = "load.txt";
 const string testResultDir = "output.csv";
 #define TEST_SLOTS 3000'0000
-CK::inputEntry entry[TEST_SLOTS];
+CK::Entry entry[TEST_SLOTS];
 
 #define EPSILON 0.000001
 
@@ -129,7 +122,7 @@ void preprocessing()
         }
     }
 }
-double LF[5], total_time[5][110], avrMove[5][110], maxMove[5][110], avrRead[5][110], maxRead[5][110], avrReadCell[5][110], maxReadCell[5][110];
+double LF[5], avrMove[5][110], maxMove[5][110], avrRead[5][110], maxRead[5][110], avrReadCell[5][110], maxReadCell[5][110];
 int totalRound[5][110];
 int LFstepSum = 100;
 
@@ -138,56 +131,17 @@ void test_all(int insert_number = TEST_SLOTS){
     int i, fails;
     int LFstep[110];
     for (i = 0; i <= LFstepSum; ++i) LFstep[i] = (int)((double)i * insert_number / LFstepSum);
-    cout << "test begin" << endl;
 /******************************* create Cuckoo ********************************/
     insertFailFlag = 0;
-    int cuckoo_max_kick_num = 3;
+    int cuckoo_max_kick_num = 10;
     CK::CuckooHashTable cuckoo(insert_number, cuckoo_max_kick_num);
-    
     for(int step = 0; step < LFstepSum; step++){
-        // if (step > 90) break;
-        auto start = std::chrono::high_resolution_clock::now();
         for(i = LFstep[step]; i < LFstep[step+1]; ++i){
-            // if (i == 23282903) {
-            //     printf("this insert");
-            //     // insertFailFlag = 1;
-            //     // break;
-            // }
             if(cuckoo.insert(entry[i]) == false){
                 insertFailFlag = 1;
                 break;
             }
-            // if (i == 18843025) {
-            //     // insertFailFlag = 1;
-            //     ++i;
-            //     break;
-            // }
         }
-        // for (int j = LFstep[step]; j < i; j++){
-        //     // if (j == 23255922) {
-        //     //     printf("watch query");
-        //     //     // continue;
-        //     //     // insertFailFlag = 1;
-        //     //     // break;
-        //     // }
-        //     auto tmpVal = new char[8];
-        //     bool result = cuckoo.query(entry[j].key, tmpVal);
-        //     if (!result){
-        //         cout << j << endl;
-        //         // assert(false);
-        //     }
-        //     // compare
-        //     if (memcmp(entry[j].val, tmpVal, 8) != 0){
-        //         cout << *((uint64_t *)entry[j].val) << " " << *((uint64_t *)tmpVal) << endl;
-        //         // assert(false);
-        //     }
-        //     delete [] tmpVal;
-        // }
-        auto end = std::chrono::high_resolution_clock::now();
-        chrono::duration<double> diff = end - start;
-        cout << "Time taken by Cuckoo Duo Step " << step << " : " << diff.count() << " seconds" << endl;
-        // cout << cuckoo.sumPathLength << " " << cuckoo.sumBFSqueueLength << " " << cuckoo.bfsTimes << endl;
-        total_time[0][step] = diff.count();
         if (insertFailFlag) break;
         cuckoo.sum_RDMA_read_num += cuckoo.sum_move_num;
         cuckoo.sum_RDMA_read_num2 += cuckoo.sum_move_num;
@@ -206,8 +160,6 @@ void test_all(int insert_number = TEST_SLOTS){
         cuckoo.max_RDMA_read_num2 = 0;
     }
     LF[0] += (double)i/insert_number;
-    cout << "Cuckoo Done" << endl;
-    return;
 /******************************* create MapEmbed ********************************/
     fails = 0;
     insertFailFlag = 0;
@@ -222,7 +174,6 @@ void test_all(int insert_number = TEST_SLOTS){
     ME::MapEmbed mapembed(MapEmbed_layer, MapEmbed_bucket_number, MapEmbed_cell_number, MapEmbed_cell_bit);
     
     for(int step = 0; step < LFstepSum; step++){
-        auto start = std::chrono::high_resolution_clock::now();
         for(i = LFstep[step]; i < LFstep[step+1]; ++i){
             ME::KV_entry insertEntry;
             memcpy(insertEntry.key, entry[i].key, 8*sizeof(char));
@@ -233,10 +184,6 @@ void test_all(int insert_number = TEST_SLOTS){
                     break;
                 }
         }
-        auto end = std::chrono::high_resolution_clock::now();
-        chrono::duration<double> diff = end - start;
-        cout << "Time taken by MapEmbed Step " << step << " : " << diff.count() << " seconds" << endl;
-        total_time[0][step] = diff.count();
         if (insertFailFlag) break;
         mapembed.sum_RDMA_read_num += mapembed.sum_move_num;
         mapembed.sum_RDMA_read_num2 += mapembed.sum_move_num;
@@ -255,13 +202,11 @@ void test_all(int insert_number = TEST_SLOTS){
         mapembed.max_RDMA_read_num2 = 0;
     }
     LF[1] += mapembed.load_factor();//(double)i/insert_number;
-    cout << "MapEmbed Done" << endl;
 // /******************************* create RACE ********************************/
     fails = 0;
     insertFailFlag = 0;
     RACE::RACETable race(insert_number);
     for(int step = 0; step < LFstepSum; step++){
-        auto start = std::chrono::high_resolution_clock::now();
         for(i = LFstep[step]; i < LFstep[step+1]; ++i){
             RACE::Entry insertEntry;
             memcpy(insertEntry.key, entry[i].key, 8*sizeof(char));
@@ -272,10 +217,6 @@ void test_all(int insert_number = TEST_SLOTS){
                     break;
                 }
         }
-        auto end = std::chrono::high_resolution_clock::now();
-        chrono::duration<double> diff = end - start;
-        cout << "Time taken by RACE Step " << step << " : " << diff.count() << " seconds" << endl;
-        total_time[0][step] = diff.count();
         if (insertFailFlag) break;
         race.sum_RDMA_read_num += race.sum_move_num;
         race.sum_RDMA_read_num2 += race.sum_move_num;
@@ -294,15 +235,12 @@ void test_all(int insert_number = TEST_SLOTS){
         race.max_RDMA_read_num2 = 0;
     }
     LF[2] += (double)i/insert_number;
-    cout << "RACE Done" << endl;
-    return;
 // /******************************* create TEA ********************************/
     fails = 0;
     insertFailFlag = 0;
     int tea_max_kick_num = 1000;
     TEA::TEATable tea(insert_number, tea_max_kick_num);
     for(int step = 0; step < LFstepSum; step++){
-        auto start = std::chrono::high_resolution_clock::now();
         for(i = LFstep[step]; i < LFstep[step+1]; ++i){
             TEA::Entry insertEntry;
             memcpy(insertEntry.key, entry[i].key, 8*sizeof(char));
@@ -313,10 +251,6 @@ void test_all(int insert_number = TEST_SLOTS){
                     break;
                 }
         }
-        auto end = std::chrono::high_resolution_clock::now();
-        chrono::duration<double> diff = end - start;
-        cout << "Time taken by TEA Step " << step << " : " << diff.count() << " seconds" << endl;
-        total_time[0][step] = diff.count();
         if (insertFailFlag) break;
         tea.sum_RDMA_read_num += tea.sum_move_num;
         tea.sum_RDMA_read_num2 += tea.sum_move_num;
@@ -335,13 +269,11 @@ void test_all(int insert_number = TEST_SLOTS){
         tea.max_RDMA_read_num2 = 0;
     }
     LF[3] += (double)i/insert_number;
-    cout << "TEA Done" << endl;
 /******************************* create Cuckoo single hash ********************************/
     insertFailFlag = 0;
     // int cuckoo_max_kick_num = 3;
     SCK::CuckooHashTable cuckooSingle(insert_number, cuckoo_max_kick_num);
     for(int step = 0; step < LFstepSum; step++){
-        auto start = std::chrono::high_resolution_clock::now();
         for(i = LFstep[step]; i < LFstep[step+1]; ++i){
             SCK::Entry insertEntry;
             memcpy(insertEntry.key, entry[i].key, 8*sizeof(char));
@@ -351,10 +283,6 @@ void test_all(int insert_number = TEST_SLOTS){
                 break;
             }
         }
-        auto end = std::chrono::high_resolution_clock::now();
-        chrono::duration<double> diff = end - start;
-        cout << "Time taken by Cuckoo Single Step " << step << " : " << diff.count() << " seconds" << endl;
-        total_time[0][step] = diff.count();
         if (insertFailFlag) break;
         cuckooSingle.sum_RDMA_read_num += cuckooSingle.sum_move_num;
         cuckooSingle.sum_RDMA_read_num2 += cuckooSingle.sum_move_num;
@@ -373,7 +301,6 @@ void test_all(int insert_number = TEST_SLOTS){
         cuckooSingle.max_RDMA_read_num2 = 0;
     }
     LF[4] += (double)i/insert_number;
-    cout << "Cuckoo Single Done" << endl;
 }
 
 int main(int argc, char *argv[])
