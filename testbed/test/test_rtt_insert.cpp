@@ -1,6 +1,6 @@
 /* 
  * A test program for insert rtts at different load factor
- * Insert rtts in (Table Ⅰ)
+ * Insert rtts in (Figure 9(b))
  */
 #include <iostream>
 #include <cmath>
