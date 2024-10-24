@@ -124,7 +124,7 @@ int main()
         int last_i = 0;
         double calc_bfs_num = 0;
 
-        ofstream dataFile("4d.csv");
+        ofstream dataFile("6d.csv");
         dataFile << "load_factor,Theoretical,Experimental,\n";
 
         for(i = 0; i < test_num; i++) 
