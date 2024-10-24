@@ -1,6 +1,6 @@
-# CuckooDuo: Extensible Dynamic Perfect Hashing for Remote Memory Key-Value Store
+# CuckooDuo: Extendible RDMA-based Remote Memory KV Store with Dynamic Perfect Hashing Index
 
-This repository contains all related code of our paper "CuckooDuo: Extensible Dynamic Perfect Hashing for Remote Memory Key-Value Store". 
+This repository contains all related code of our paper "Extendible RDMA-based Remote Memory KV Store with Dynamic Perfect Hashing Index". 
 
 **Our codes can automatically reproduce all experimental results (figures) in our paper.**
 
