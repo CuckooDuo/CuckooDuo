@@ -57,3 +57,6 @@ add_executable(test_query_cache ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/t
 
 add_executable(test_stash ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_stash.cpp)
 add_executable(test_rtt_insert ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_rtt_insert.cpp)
+
+add_executable(test_large_latency ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_large_latency.cpp)
+add_executable(test_large_multi ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_large_multi.cpp)
