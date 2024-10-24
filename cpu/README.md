@@ -143,3 +143,47 @@ By running the following commands, you can automatically reproduce the results i
   ```bash
   python extra_experiment.py -fig 5i
   ```
+
+### Experiments added during the revision of the paper
+
+1. **Memory Access and Elements Metrics with Cache**
+
+   To run the experiment that evaluates memory access count and the number of memory elements accessed under different proportions of illegal query operations with caching, execute the following commands:
+
+   ```bash
+   g++ cacheExperiment.cpp -o main
+   ./main
+   ```
+
+2. **Adjustment Frequency vs. Fingerprint Length and Load Factor**
+
+   To obtain data on how the number of adjustments in CuckooDuo (ours) changes with the fingerprint length and load factor, use the following script:
+
+   ```bash
+   ./AdjustmentInBucketvsLFvsSIGLEN.sh
+   ```
+
+3. **Load Factor and False Positive Rate vs. Fingerprint Length**
+
+   This script generates experimental data on load factor and false positive rate in CuckooDuo (ours) as the fingerprint length varies:
+
+   ```bash
+   ./LFvsSIGLEN_FPRvsSIGLEN.sh
+   ```
+
+4. **BPK and Load Factor: CuckooDuo vs Megakv by Fingerprint Length**
+
+   To compare BPK and load factor for CuckooDuo (ours) and Megakv across different fingerprint lengths, run:
+
+   ```bash
+   ./bpk_lf_siglen_ours_vs_single.sh
+   ```
+
+5. **BPK Comparison: CuckooDuo vs CCEH by Insertion Volume**
+
+   For a comparison of BPK between CuckooDuo (ours) and CCEH as the insertion volume changes, compile and run the following program:
+
+   ```bash
+   g++ ours_vs_cceh_bpk.cpp -o main -D SIG_BIT=16
+   ./main
+   ```
