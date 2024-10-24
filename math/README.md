@@ -10,13 +10,13 @@ This folder contains the codes for validating the theoretical results in our pap
 * `CuckooDuo.h`: Implementation of CuckooDuo algorithm
 * `CuckooSingle.h`: Implementation of single fingerprint cuckoo
 * `CuckooDuo_BFSfailure.h`: Implementation of CuckooDuo algorithm for BFSfailure counting
-* `4a_SingleCollide.cpp`: Testing and comparing CuckooSingle's numbers of collide items 
-* `4b_4c_CollideItems.cpp`: Testing and comparing CuckooDuo's numbers of collide items
-* `4d_BFSfailure.cpp`: Testing and comparing CuckooDuo's numbers of BFS failure items
-* `4a_SingleCollide.py`: Python script for generating csv data for Fig.4a
-* `4b_CollideItems.py`: Python script for generating csv data for Fig.4b
-* `4c_CollideItems.py`: Python script for generating csv data for Fig.4c
-* `4d_BFSfailure.py`: Python script for generating csv data for Fig.4d
+* `6a_SingleCollide.cpp`: Testing and comparing CuckooSingle's numbers of collide items 
+* `6b_6c_CollideItems.cpp`: Testing and comparing CuckooDuo's numbers of collide items
+* `6d_BFSfailure.cpp`: Testing and comparing CuckooDuo's numbers of BFS failure items
+* `6a_SingleCollide.py`: Python script for generating csv data for Fig.6a
+* `6b_CollideItems.py`: Python script for generating csv data for Fig.6b
+* `6c_CollideItems.py`: Python script for generating csv data for Fig.6c
+* `6d_BFSfailure.py`: Python script for generating csv data for Fig.6d
 
 
 ## Datasets
@@ -31,29 +31,29 @@ Below we show some examples of running tests. Test results csv files will be sav
 
 By running the following commands, you can automatically reproduce the results in our paper. 
 
-* Collided Items of CuckooSingle(f=16) vs. Load Factor (Figure 4(a))
+* Collided Items of CuckooSingle(f=16) vs. Load Factor (Figure 6(a))
 
   ```bash
-  python 4a_SingleCollide.py
+  python 6a_SingleCollide.py
   ```
 
 
-* Collided Items of CuckooDuo(f=8) vs. Bucket Size (Figure 4(b))
+* Collided Items of CuckooDuo(f=8) vs. Bucket Size (Figure 6(b))
 
   ```bash
-  python 4b_CollideItems.py
+  python 6b_CollideItems.py
   ```
 
 
-* Collided Items of CuckooDuo(f=16) vs. Bucket Size (Figure 4(c))
+* Collided Items of CuckooDuo(f=16) vs. Bucket Size (Figure 6(c))
 
   ```bash
-  python 4c_CollideItems.py
+  python 6c_CollideItems.py
   ```
 
 
-* BFS Failed Items of CuckooSingle(L=1) vs. Load Factor (Figure 4(d))
+* BFS Failed Items of CuckooSingle(L=1) vs. Load Factor (Figure 6(d))
 
   ```bash
-  python 4d_BFSfailure.py
+  python 6d_BFSfailure.py
   ```
