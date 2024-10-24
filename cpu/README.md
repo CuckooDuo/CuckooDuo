@@ -42,14 +42,14 @@ Below we show some examples of running tests. The directory where test results a
 By running the following commands, you can automatically reproduce the results in our paper. 
 
 
-* Load Factor of all algorithms vs. Bucket Size (Figure 6(a))
+* Load Factor of all algorithms vs. Bucket Size (Figure 9(a))
 
   ```bash
   python bucket_sizeVSload_factor.py
   ```
 
 
-* Average number of memory accesses vs. Load factor (Figure 6(b))
+* Average number of memory accesses vs. Load factor (Figure 3(a) in Supplementary Materials)
 
   ```bash
   ./main average_memory_accesses
@@ -63,7 +63,7 @@ By running the following commands, you can automatically reproduce the results i
   ```
 
 
-* Average number of moved items vs. Load factor (Figure 6(c))
+* Average number of moved items vs. Load factor (Figure 3(b) in Supplementary Materials)
 
   ```bash
   ./main average_moved_items
@@ -77,7 +77,7 @@ By running the following commands, you can automatically reproduce the results i
   ```
 
 
-* Average number of accessed items vs. Load factor (Figure 6(d))
+* Average number of accessed items vs. Load factor (Figure 9(c))
 
   ```bash
   ./main average_accessed_items
@@ -90,55 +90,55 @@ By running the following commands, you can automatically reproduce the results i
   ./main worst_accessed_items
   ```
 
-* Load factor(bucket size) vs. Table Size (Figure 5(a))
+* Load factor(bucket size) vs. Table Size (Figure 7(a))
 
   ```bash
   python experiment.py -fig 5a
   ```
 
-* Load factor(f) vs. Table Size (Figure 5(b))
+* Load factor(f) vs. Table Size
 
   ```bash
   python experiment.py -fig 5b
   ```
 
-* False Positive Rate vs. Bucket Size (Figure 5(c))
+* False Positive Rate vs. Bucket Size
 
   ```bash
   python experiment.py -fig 5c
   ```
 
-* Load factor of BFS(ours), DFS(cuckoo) vs. Table Size (Figure 5(d))
+* Load factor of BFS(ours), DFS(cuckoo) vs. Table Size (Figure 7(b))
 
   ```bash
   python extra_experiment.py -fig 5d
   ```
 
-* Moved Items of BFS(ours), DFS(cuckoo) vs. Load factor (Figure 5(e))
+* Moved Items of BFS(ours), DFS(cuckoo) vs. Load factor (Figure 7(c))
 
   ```bash
   python extra_experiment.py -fig 5e
   ```
   
-* Load factor(L) vs. Bucket Size (Figure 5(f))
+* Load factor(L) vs. Bucket Size (Figure 7(d))
 
   ```bash
   python extra_experiment.py -fig 5f
   ```
   
-* items in stash of Basic, Dual-FP vs. Inserted Items (Figure 5(g))
+* items in stash of Basic, Dual-FP vs. Inserted Items (Figure 7(g))
 
   ```bash
   python get_5g.py
   ```
   
-* Load factor of Basic, Dual-FP vs. Table Size (Figure 5(h))
+* Load factor of Basic, Dual-FP vs. Table Size (Figure 7(h))
 
   ```bash
   python experiment.py -fig 5h
   ```
   
-* FP adjust rate(f) vs. Load factor (Figure 5(i))
+* FP adjust rate(f) vs. Load factor
 
   ```bash
   python extra_experiment.py -fig 5i
