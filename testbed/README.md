@@ -10,10 +10,13 @@ We also implement the other three algorithms in our testbed: MapEmbed, RACE, and
 
 ### algorithms: 
 * `murmur3.h`: MurmurHash
-* `CuckooDuo.h`: Implementation of CuckooDuo algorithm with RDMA
+* `SimpleCache.h`: Implementation of LRU cache for below KV tables
+* `cuckooduo.h`: Implementation of CuckooDuo algorithm with RDMA
 * `mapembed.h`: Implementation of MapEmbed algorithm with RDMA
 * `race.h`: Implementation of RACE algorithm with RDMA
 * `tea.h`: Implementation of TEA algorithm with RDMA
+* `cuckooduo_large.h`: Implementation of CuckooDuo algorithm with RDMA for large table
+* `cuckooduo_siglen.h`: Implementation of CuckooDuo algorithm with RDMA and changeable length of fingerprint
 
 ### rdma: 
 * `rdma_common.h/cpp`: The common RDMA routines used in the server/client program
@@ -23,14 +26,30 @@ We also implement the other three algorithms in our testbed: MapEmbed, RACE, and
 
 ### test:
 * `test_latency.cpp`: Test program for latency at different load factor
+* `test_large_latency.cpp`: Test program for latency at different load factor on large-scale workloads
 * `test_multi.cpp`: Test program for throughput with different thread number
+* `test_multi_insert.cpp`: Test program for insert throughput with 16 threads at different load factor
+* `test_large_multi.cpp`: Test program for throughput with different thread number on large-scale workloads
 * `test_hybrid_single.cpp`: Test program for latency on hybrid workloads with single thread
 * `test_hybrid_multi.cpp`: Test program for throughput on hybrid workloads with multiple thread
-* `test_expand.cpp`: Test program for expansion
+* `test_hybrid_cache.cpp`: Test program for latency on hybrid workloads with single thread with cache
+* `test_expand.cpp`: Test program for CuckooDuo expansion
+* `test_expand2.cpp`: Test program for RACE expansion
+* `test_expand3.cpp`: Test program for MapEmbed expansion
+* `test_bpk_latency.cpp`: Test program for insert and lookup latencies of CuckooDuo with different length of fingerprint
+* `test_partial_insert.cpp`: Test program for insert latency with existent keys of CuckooDuo
+* `test_partial_query.cpp`: Test program for lookup latency with non-existent keys of CuckooDuo
+* `test_query_cache.cpp`: Test program for lookup latency with cache under the same fast memory
+* `test_stash.cpp`: Test program for lookup latency with different stash sizes
+* `test_rtt_insert.cpp`: Test program for insert rtts at different load factor
+* `test_workloada.cpp`: Test program for latency on YCSB-A workloads (50% Lookup & 50% Update)
+* `test_workloadd.cpp`: Test program for latency on YCSB-D workloads (95% Insert & 5% Lookup)
 
 ### ycsb_header: 
 * `ycsb_read.h`: Definions and tools for work with YCSB
 * `ycsb_cuckooduo.h`: Functions to work with YCSB datasets on CuckooDuo
+* `ycsb_cuckooduo_large.h`: Functions to work with YCSB datasets on CuckooDuo with large table
+* `ycsb_cuckooduo_siglen.h`: Functions to work with YCSB datasets on CuckooDuo with changeable length of fingerprint
 * `ycsb_mapembed.h`: Functions to work with YCSB datasets on MapEmbed
 * `ycsb_race.h`: Functions to work with YCSB datasets on RACE
 * `ycsb_tea.h`: Functions to work with YCSB datasets on TEA
@@ -101,37 +120,129 @@ The results will stored in csv files described by `csv_path` in corresponding cp
 
 You can also get more details of each test in corresponding cpp files, and modify test by yourself.
 
-* Comparison of average latency with prior art (Figure 7(a~d))
+* Comparison of query latency with different stash sizes (Figure 7(k))
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_stash -a remote_IP
+```
+
+* Comparison of latency at different fingerprint length (Figure 8(c~d))
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_bpk_latency -a remote_IP
+```
+
+* Comparison of insert rtts at different load factor (Figure 9(b))
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_rtt_insert -a remote_IP
+```
+
+* Comparison of average latency with prior art (Figure 10(a~d) & Figure 7(e~f))
 ```bash
 server@: ./bin/rdma_server -a remote_IP
 
 client@: ./bin/test_latency -a remote_IP
 ```
 
-*  Comparison of average throughput with prior art. (Figure 8(a~d))
+* Comparison of insert latency of CuckooDuo with existent keys (Figure 10(e))
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_partial_insert -a remote_IP
+```
+
+* Comparison of query latency of CuckooDuo with non-existent keys (Figure 10(f))
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_partial_query -a remote_IP
+```
+
+* Comparison of insert throughput in 16 threads with prior art (Figure 10(g))
+```bash
+server@: ./bin/rdma_server -a remote_IP -n 16
+
+client@: ./bin/test_multi_insert -a remote_IP -n 16
+```
+
+*  Comparison of average throughput with prior art. (Figure 10(h~k))
 ```bash
 server@: ./bin/rdma_server -a remote_IP -n 16
 
 client@: ./bin/test_multi -a remote_IP -n 16
 ```
 
-* Comparison of speed on hybrid workloads (Figure 10(a))
+*  Comparison of query latency with cache under the same fast memory. (Figure 11(c))
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_query_cache -a remote_IP
+```
+
+*  Performance of dynamic expansion (Figure 12(a~e))
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_expand -a remote_IP
+```
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_expand2 -a remote_IP
+```
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_expand3 -a remote_IP
+```
+
+* Comparison of average latency on YCSB-A and YCSB-D workloads (Table Ⅲ)
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_workloada -a remote_IP
+```
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_workloadd -a remote_IP
+```
+
+* Comparison of speed on hybrid workloads (Figure 5(a) in Supplementary Materials)
 ```bash
 server@: ./bin/rdma_server -a remote_IP
 
 client@: ./bin/test_hybrid_single -a remote_IP
 ```
 
-* Comparison of speed on hybrid workloads (Figure 10(b))
+* Comparison of throughput on hybrid workloads (Figure 5(b) in Supplementary Materials)
 ```bash
 server@: ./bin/rdma_server -a remote_IP -n 16
 
 client@: ./bin/test_hybrid_multi -a remote_IP -n 16
 ```
 
-*  Performance of dynamic expansion (Figure 11(b))
+* Comparison of speed on hybrid workloads with cache (Figure 5(c) in Supplementary Materials)
 ```bash
 server@: ./bin/rdma_server -a remote_IP
 
-client@: ./bin/test_expand -a remote_IP
+client@: ./bin/test_hybrid_cache -a remote_IP
+```
+
+* Comparison of latency of CuckooDuo on large-scalse workloads (Figure 6(a) in Supplementary Materials)
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_large_latency -a remote_IP
+```
+
+* Comparison of throughput on CuckooDuo on large-scalse workloads (Figure 6(b) in Supplementary Materials)
+```bash
+server@: ./bin/rdma_server -a remote_IP -n 16
+
+client@: ./bin/test_large_multi -a remote_IP -n 16
 ```
