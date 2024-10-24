@@ -146,7 +146,7 @@ By running the following commands, you can automatically reproduce the results i
 
 ### Experiments added during the revision of the paper
 
-1. **Memory Access and Elements Metrics with Cache**
+1. **Memory Access and Elements Metrics with Cache (Figure 11(a~b))**
 
    To run the experiment that evaluates memory access count and the number of memory elements accessed under different proportions of illegal query operations with caching, execute the following commands:
 
@@ -155,7 +155,7 @@ By running the following commands, you can automatically reproduce the results i
    ./main
    ```
 
-2. **Adjustment Frequency vs. Fingerprint Length and Load Factor**
+2. **Adjustment Frequency vs. Fingerprint Length and Load Factor (Figure 7(i))**
 
    To obtain data on how the number of adjustments in CuckooDuo (ours) changes with the fingerprint length and load factor, use the following script:
 
@@ -163,7 +163,7 @@ By running the following commands, you can automatically reproduce the results i
    ./AdjustmentInBucketvsLFvsSIGLEN.sh
    ```
 
-3. **Load Factor and False Positive Rate vs. Fingerprint Length**
+3. **Load Factor and False Positive Rate vs. Fingerprint Length (Figure 8(a~b))**
 
    This script generates experimental data on load factor and false positive rate in CuckooDuo (ours) as the fingerprint length varies:
 
@@ -171,7 +171,7 @@ By running the following commands, you can automatically reproduce the results i
    ./LFvsSIGLEN_FPRvsSIGLEN.sh
    ```
 
-4. **BPK and Load Factor: CuckooDuo vs Megakv by Fingerprint Length**
+4. **BPK and Load Factor: CuckooDuo vs Megakv by Fingerprint Length (Figure 7(a) in Supplementary Materials)**
 
    To compare BPK and load factor for CuckooDuo (ours) and Megakv across different fingerprint lengths, run:
 
@@ -179,7 +179,7 @@ By running the following commands, you can automatically reproduce the results i
    ./bpk_lf_siglen_ours_vs_single.sh
    ```
 
-5. **BPK Comparison: CuckooDuo vs CCEH by Insertion Volume**
+5. **BPK Comparison: CuckooDuo vs CCEH by Insertion Volume (Figure 7(b) in Supplementary Materials)**
 
    For a comparison of BPK between CuckooDuo (ours) and CCEH as the insertion volume changes, compile and run the following program:
 
