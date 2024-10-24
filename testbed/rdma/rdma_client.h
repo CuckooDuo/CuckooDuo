@@ -252,9 +252,11 @@ static inline int expand_remote(int n, int copyFlag = 0) {
   int old_sz = server_metadata_mr.size();
   int new_sz;
   if (copyFlag != 3)
-  new_sz = n*old_sz;
+    // CuckooDuo and RACE allocate old_sz blocks each time
+    new_sz = n*old_sz;
   else
-  new_sz = old_sz+1;
+    // Mapembed allocates a new block with new_sz each time
+    new_sz = old_sz+1;
 
   struct ibv_wc wc;
   int ret = -1;
@@ -339,6 +341,7 @@ static inline RemoteAddr get_offset_table(int table_i, int bucket_i, int cell_i,
   RemoteAddr ra;
 
   if (type == 0) {
+    // for race and tea
     ra.idx = bucket_i/(cell_num/N);
 
     ra.offset = 0;
@@ -346,6 +349,7 @@ static inline RemoteAddr get_offset_table(int table_i, int bucket_i, int cell_i,
     ra.offset += cell_i*(KV_LEN);
   }
   else if (type == 1) {
+    // for cuckooduo
   	ra.idx = bucket_i/(cell_num/2/N);
 
     ra.offset = table_i *(cell_num/2)*(KV_LEN);
@@ -353,6 +357,7 @@ static inline RemoteAddr get_offset_table(int table_i, int bucket_i, int cell_i,
     ra.offset += cell_i*(KV_LEN);
   }
   else if (type == 2) {
+    // for mapembed
     ra.idx = server_metadata_mr.size()-1;
 
     ra.offset = 0;
