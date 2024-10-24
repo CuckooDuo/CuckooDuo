@@ -8,14 +8,18 @@
 
 namespace TEA {
 /* Excute commands with entries in type defined by cmd with thread tid */
-int inline ExecuteCmd(TEA::TEATable *tb, int num_ops, command cmd, int tid) {
+int inline ExecuteCmd(TEA::TEATable *tb, int num_ops, command cmd, int tid, int start_loc = 0) {
 	int oks = 0;
-	int offset = num_ops*tid;
+	int offset = num_ops*tid+start_loc;
 	
 	tid = connect_num-1-tid;
 
 	switch (cmd)
 	{
+	case QINSERT:
+		for (int i = 0; i < num_ops; ++i)
+			oks += tb->checkInsert(entry[offset+i], tid);
+		break;
 	case INSERT:
 		for (int i = 0; i < num_ops; ++i) {
 			if (tb->insert(entry[offset+i], tid))
@@ -44,7 +48,7 @@ int inline ExecuteCmd(TEA::TEATable *tb, int num_ops, command cmd, int tid) {
 }
 
 /* Excute commands with entries in type defined by cmd on multiple threads */
-int inline MultiThreadAction(TEA::TEATable *tb, int total_ops, int num_threads, command cmd) {
+int inline MultiThreadAction(TEA::TEATable *tb, int total_ops, int num_threads, command cmd, int start_loc = 0) {
 	int ret = -1;
 
 	vector<future<int>> actual_ops;
@@ -53,7 +57,7 @@ int inline MultiThreadAction(TEA::TEATable *tb, int total_ops, int num_threads, 
 
 	for (int i = 0; i < num_threads; ++i) {
 		actual_ops.emplace_back(async(launch::async, ExecuteCmd,
-									  tb, part_ops, cmd, i));
+									  tb, part_ops, cmd, i, start_loc));
 
 	}
 
@@ -80,19 +84,8 @@ int inline MultiThreadAction(TEA::TEATable *tb, int total_ops, int num_threads, 
 	return ret;
 }
 
-/* Seperate types and entries of commands paired in sequence */
-struct full_cmd_t {
-	vector<command> *cmd;
-	vector<Entry> *entry;
-
-	full_cmd_t(vector<command> *c, vector<Entry> *e) {
-		cmd = c;
-		entry = e;
-	}
-};
-
 /* Excute full commands with thread tid */
-int inline ExecuteFullCmd(TEA::TEATable *tb, int num_ops, full_cmd_t *fc, int tid) {
+int inline ExecuteFullCmd(TEA::TEATable *tb, int num_ops, int tid) {
 	int oks = 0;
 	int offset = num_ops*tid;
 	
@@ -101,16 +94,24 @@ int inline ExecuteFullCmd(TEA::TEATable *tb, int num_ops, full_cmd_t *fc, int ti
 	bool insert_success = true;
 
 	for (int i = 0; i < num_ops; ++i) {
-		switch((*(fc->cmd))[offset+i]) {
+		switch(fc_cmd[offset+i]) {
+			case QINSERT:
+				oks += tb->checkInsert(fc_entry[offset+i], tid);
+				break;
 			case INSERT:
 				if (!insert_success)
 					break;
-				insert_success = tb->insert((*(fc->entry))[offset+i], tid);
+				insert_success = tb->insert(fc_entry[offset+i], tid);
 				oks += insert_success;
-				//oks += tb->insert((*(fc->entry))[offset+i], tid);
 				break;
 			case READ:
-				oks += tb->query((*(fc->entry))[offset+i].key, NULL, tid);
+				oks += tb->query(fc_entry[offset+i].key, NULL, tid);
+				break;
+			case UPDATE:
+				oks += tb->update(fc_entry[offset+i], tid);
+				break;
+			case DELETE:
+				oks += tb->deletion(fc_entry[offset+i].key, tid);
 				break;
 			default:
 				break;
@@ -121,19 +122,18 @@ int inline ExecuteFullCmd(TEA::TEATable *tb, int num_ops, full_cmd_t *fc, int ti
 }
 
 /* Excute full commands on multiple threads */
-int inline MultiThreadRun(TEA::TEATable *tb, full_cmd_t *fc, int num_threads) {
+int inline MultiThreadRun(TEA::TEATable *tb, int total_ops, int num_threads) {
 	int ret = -1;
 
 	vector<future<int>> actual_ops;
 
 	cout << "running..." << endl;
 	
-	int total_ops = full_command.size(); // The count of YCSB commands
 	int part_ops = total_ops/num_threads;
 
 	for (int i = 0; i < num_threads; ++i) {
 		actual_ops.emplace_back(async(launch::async, ExecuteFullCmd,
-									  tb, part_ops, fc, i));
+									  tb, part_ops, i));
 
 	}
 

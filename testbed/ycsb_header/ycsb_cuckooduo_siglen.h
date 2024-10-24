@@ -1,14 +1,14 @@
 /*
- * Functions to work with YCSB datasets on MapEmbed
+ * Functions to work with YCSB datasets on CuckooDuo
  */
 #include <future>
 
-#include "../algorithms/mapembed.h"
+#include "../algorithms/cuckooduo_siglen.h"
 #include "ycsb_read.h"
 
-namespace ME {
+namespace CK {
 /* Excute commands with entries in type defined by cmd with thread tid */
-int inline ExecuteCmd(ME::MapEmbed *tb, int num_ops, command cmd, int tid, int start_loc = 0) {
+int inline ExecuteCmd(CK::CuckooHashTable *tb, int num_ops, command cmd, int tid, int start_loc = 0) {
 	int oks = 0;
 	int offset = num_ops*tid+start_loc;
 	
@@ -22,10 +22,12 @@ int inline ExecuteCmd(ME::MapEmbed *tb, int num_ops, command cmd, int tid, int s
 		break;
 	case INSERT:
 		for (int i = 0; i < num_ops; ++i) {
-			if (tb->insert(entry[offset+i], 0, tid))
+			if (tb->insert(entry[offset+i], tid))
 				oks += 1;
 			else
 				break;
+			/*if (oks % 100000 == 0)
+				printf("%d: %d\n", connect_num-1-tid, oks);*/
 		}
 		break;
 	case READ:
@@ -48,10 +50,10 @@ int inline ExecuteCmd(ME::MapEmbed *tb, int num_ops, command cmd, int tid, int s
 }
 
 /* Excute commands with entries in type defined by cmd on multiple threads */
-int inline MultiThreadAction(ME::MapEmbed *tb, int total_ops, int num_threads, command cmd, int start_loc = 0) {
+int inline MultiThreadAction(CK::CuckooHashTable *tb, int total_ops, int num_threads, command cmd, int start_loc = 0) {
 	int ret = -1;
 
-	vector<future<int>> actual_ops;
+	vector<future<int>> actual_ops;	
 
 	int part_ops = total_ops/num_threads;
 
@@ -85,7 +87,7 @@ int inline MultiThreadAction(ME::MapEmbed *tb, int total_ops, int num_threads, c
 }
 
 /* Excute full commands with thread tid */
-int inline ExecuteFullCmd(ME::MapEmbed *tb, int num_ops, int tid) {
+int inline ExecuteFullCmd(CK::CuckooHashTable *tb, int num_ops, int tid) {
 	int oks = 0;
 	int offset = num_ops*tid;
 	
@@ -101,7 +103,7 @@ int inline ExecuteFullCmd(ME::MapEmbed *tb, int num_ops, int tid) {
 			case INSERT:
 				if (!insert_success)
 					break;
-				insert_success = tb->insert(fc_entry[offset+i], 0, tid);
+				insert_success = tb->insert(fc_entry[offset+i], tid);
 				oks += insert_success;
 				break;
 			case READ:
@@ -122,13 +124,13 @@ int inline ExecuteFullCmd(ME::MapEmbed *tb, int num_ops, int tid) {
 }
 
 /* Excute full commands on multiple threads */
-int inline MultiThreadRun(ME::MapEmbed *tb, int total_ops, int num_threads) {
+int inline MultiThreadRun(CK::CuckooHashTable *tb, int total_ops, int num_threads) {
 	int ret = -1;
 
 	vector<future<int>> actual_ops;
 
 	cout << "running..." << endl;
-	
+
 	int part_ops = total_ops/num_threads;
 
 	for (int i = 0; i < num_threads; ++i) {

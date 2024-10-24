@@ -32,14 +32,18 @@ struct Entry{
 vector<Entry> entry;
 
 enum command {
-    INSERT = 1,
-    UPDATE = 2,
-    READ = 3,
-    DELETE = 4
+    QINSERT = 0,    // check if entry exists before insert
+    INSERT = 1,     // insert command
+    UPDATE = 2,     // update command
+    READ = 3,       // query command
+    DELETE = 4      // deletion command
 };
 map<string, command> str_to_cmd = { {"INSERT",INSERT}, {"UPDATE",UPDATE}, {"DELETE",DELETE}, {"READ",READ} };
 /* Vector stored YCSB commands */
 vector< tuple<command, uint64_t> > full_command;
+
+vector<command> fc_cmd;
+vector<Entry> fc_entry;
 #endif
 
 /* Read entries form a load dataset generated with YCSB */
@@ -98,6 +102,8 @@ void read_ycsb_run(string run_path)
     std::vector<std::string> prefixes; // vector stored prefixes each command line
 
     std::string line;
+    int count = 0;
+
     while (std::getline(inputFile, line)) {
         // Look up the line with "usertable"
         size_t found = line.find("usertable user");
@@ -115,7 +121,11 @@ void read_ycsb_run(string run_path)
                 try {
                     uint64_t userID = std::stoull(userIDStr);
 
-                    full_command.emplace_back(tuple<command, uint64_t> (str_to_cmd[prefix], userID));
+                    //full_command.emplace_back(tuple<command, uint64_t> (str_to_cmd[prefix], userID));
+
+                    fc_cmd.push_back(str_to_cmd[prefix]);
+                    fc_entry.push_back({});
+                    *(uint64_t*)fc_entry[count++].key = userID;
 
                 } catch (const std::invalid_argument& e) {
                     std::cerr << "invalid id: " << userIDStr << std::endl;
@@ -126,7 +136,8 @@ void read_ycsb_run(string run_path)
         }
     }
 
-    cout<<"run: "<<full_command.size()<<" keys"<<endl;
+    cout<<"run: "<<count<<" keys"<<endl;
+    
     inputFile.close();
 }
 
