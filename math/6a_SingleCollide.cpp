@@ -106,7 +106,7 @@ int main()
         timer0 = timer = clock();
         int last_i = 0;
 
-        ofstream dataFile("4a.csv");
+        ofstream dataFile("6a.csv");
         dataFile << "load_factor,Experimental,Theoretical\n";
 
         for(i = 0; i < test_num; i++) 
