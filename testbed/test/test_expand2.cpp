@@ -1,9 +1,7 @@
 /* 
- * A test program for CuckooDuo expansion
- * Active (Figure 12(a))
- * Lazy (Figure 12(d))
+ * A test program for RACE expansion (Figure 12(b))
  */
-#include "../ycsb_header/ycsb_cuckooduo.h"
+#include "../ycsb_header/ycsb_race.h"
 
 #include <iostream>
 
@@ -32,7 +30,7 @@ void writeCSV(const string& filename) {
         return;
     }
 
-	file << "Size,Copy,Copy&Clean\n";
+	file << "Size,Copy,Copy&Move\n";
 	for (const auto& item : csv_data) {
 		file << item.size << ","
 			 << item.t1 << ","
@@ -47,6 +45,10 @@ int main(int argc, char **argv) {
 
 	/* You can use this to get a minor partial dataset */
 	//entry.erase(entry.begin()+6400000, entry.end());
+	/*for (int i = 0; i < 30'000'000; ++i) {
+		entry.push_back({});
+		*(uint64_t*)entry[i].key = i;
+	}*/
 
 	int cell_number = entry.size()/8;
 	int max_kick_num = 3;
@@ -55,7 +57,7 @@ int main(int argc, char **argv) {
 	rdma_client_init(argc, argv, cell_number);
 	sleep(1);
 
-	CK::CuckooHashTable tb(cell_number, max_kick_num, thread_num, connect_num);
+	RACE::RACETable tb(cell_number, thread_num);
 
 	int sock = set_tcp_client();
 	if (sock <= 0) {
@@ -64,15 +66,15 @@ int main(int argc, char **argv) {
 
 	/* Insert 1/8 with load factor at 0.9 at first */
 	int success_cnt = 0;
-	success_cnt = CK::MultiThreadAction(&tb, cell_number/10*9, thread_num, command::INSERT);
-	entry.erase(entry.begin(), entry.begin()+cell_number/10*9);
+	success_cnt = RACE::MultiThreadAction(&tb, cell_number/10*9, thread_num, command::INSERT);
+
 	cout << "1/8 inserted" << endl;
 	cout << "load_factor at: " << double(success_cnt)/cell_number << endl;
 
 	pair<long long, long long> t;
 	for (int i = 0; i < 4; ++i) {
 		/* Expand to double once, from 1/8 to 2 */
-		t = tb.expand(2, sock);
+		t = tb.expand2(2, sock);
 		cout << t.first << " " << t.second << endl;
 		char info[32];
 		sprintf(info, "%.2lfM to %.2lfM", ((double)(cell_number<<i))/1000000, ((double)((cell_number<<(i+1)))/1000000));
@@ -85,9 +87,14 @@ int main(int argc, char **argv) {
 		
 		/* Insert with load factor at 0.9 after expansion */
 		if (i < 3) {
+			send_msg("zero", sock);
+			memset(tb.table.cell, 0, sizeof(uint32_t)*tb.bucket_number);
+			memset(tb.table.bucket, 0, sizeof(RACE::Bucket)*tb.bucket_number);
+			tb.stash.clear();
+			
 			cout << (1<<(i+1))-(1<<i) << endl;
-			success_cnt += CK::MultiThreadAction(&tb, cell_number*(1<<i)/10*9, thread_num, command::INSERT);
-			entry.erase(entry.begin(), entry.begin()+cell_number*(1<<i)/10*9);
+			success_cnt = RACE::MultiThreadAction(&tb, cell_number*(1<<(i+1))/10*9, thread_num, command::INSERT);
+
 			cout << "1/" << (8>>(i+1)) << " inserted" << endl;
 			cout << "load_factor at: " << double(success_cnt)/(cell_number*(1<<(i+1))) << endl;
 		}
@@ -95,7 +102,7 @@ int main(int argc, char **argv) {
 		cout << endl;
 	}
 
-	string csv_path = "test_expand.csv";
+	string csv_path = "test_expand2.csv";
 	writeCSV(csv_path);
 
 	send_msg("over", sock);

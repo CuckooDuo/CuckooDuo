@@ -1,6 +1,6 @@
 /* 
- * A test program for latency of hybrid workloads
- * Latency (Figure 5(a) in Supplementary Materials)
+ * A test program for latency of hybrid workloads with cache
+ * Latency with cache (Figure 5(c) in Supplementary Materials)
  */
 #include <iostream>
 #include <cmath>
@@ -9,6 +9,8 @@
 #include "../ycsb_header/ycsb_mapembed.h"
 #include "../ycsb_header/ycsb_race.h"
 #include "../ycsb_header/ycsb_tea.h"
+
+#define CACHE_BYTES (65 * 1024 * 1024)
 
 /* Struct of result data */
 class csv_toulpe {
@@ -174,14 +176,19 @@ int main(int argc, char **argv) {
 	string run_prefix = "ycsb_files/run_";
 	string run_suffix = ".txt";
 
-	string csv_path = "hybrid_single.csv";
+	string csv_path = "hybrid_cache.csv";
 
 	/* Test latency with 1 thread on different hybrid wordloads
 	 * Insertion/Query changes from 90/10 to 10/90
 	 */
 	read_ycsb_load(load_path);
-	// load factor: 60%
+	// make load factor be 60%
 	entry.erase(entry.begin()+18000000, entry.end());
+
+	CK::TOTAL_MEMORY_BYTE_USING_CACHE = CACHE_BYTES;
+	ME::TOTAL_MEMORY_BYTE_USING_CACHE = CACHE_BYTES;
+	RACE::TOTAL_MEMORY_BYTE_USING_CACHE = CACHE_BYTES;
+	TEA::TOTAL_MEMORY_BYTE_USING_CACHE = CACHE_BYTES;
 
 	for (int i = 10; i < 100; i += 10) {
 		cout << endl << "Query/Insertion Ratio: " << i << "/" << 100-i << endl;

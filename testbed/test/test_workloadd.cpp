@@ -1,6 +1,7 @@
 /* 
- * A test program for latency of hybrid workloads
- * Latency (Figure 5(a) in Supplementary Materials)
+ * A test program for YCSB-D workloads (95% Insert & 5% Lookup)
+ * Zipf-0.99, Zipf-0.90, Uniform, Latest
+ * (Lower part of Table Ⅲ)
  */
 #include <iostream>
 #include <cmath>
@@ -10,14 +11,16 @@
 #include "../ycsb_header/ycsb_race.h"
 #include "../ycsb_header/ycsb_tea.h"
 
+#define CACHE_BYTES (65 * 1024 * 1024)
+
 /* Struct of result data */
 class csv_toulpe {
 public:
-	string ratio;
-	double ck_latency;
-	double me_latency;
-	double race_latency;
-	double tea_latency;
+	string distribution;
+	double ck_latency[2];
+	double me_latency[2];
+	double race_latency[2];
+	double tea_latency[2];
 };
 vector<csv_toulpe> csv_data;
 
@@ -29,17 +32,29 @@ void writeCSV(const string& filename) {
         return;
     }
 
-	file << "Insertion/Qurey,CuckooDuo,MapEmbed,RACE,TEA\n";
+	file << "Distribution,"
+		 << "CK0,ME0,RACE0,TEA0,"
+		 << "CK1,ME1,RACE1,TEA1"
+		 << "\n";
 	for (const auto& item : csv_data) {
-		file << item.ratio << ","
-			 << item.ck_latency << ","
-			 << item.me_latency << ","
-			 << item.race_latency << ","
-			 << item.tea_latency << "\n";
+		file << item.distribution << ","
+			 << item.ck_latency[0] << ","
+			 << item.me_latency[0] << ","
+			 << item.race_latency[0] << ","
+			 << item.tea_latency[0] << ","
+			 << item.ck_latency[1] << ","
+			 << item.me_latency[1] << ","
+			 << item.race_latency[1] << ","
+			 << item.tea_latency[1] << "\n";
 	}
 }
 
-double test_ck(int cell_number) {
+double test_ck(int cell_number, bool cacheFlag, int i) {
+	if (cacheFlag)
+		CK::TOTAL_MEMORY_BYTE_USING_CACHE = CACHE_BYTES;
+	else
+		CK::TOTAL_MEMORY_BYTE_USING_CACHE = 0;
+
 	CK::CuckooHashTable tb(cell_number, 3, 1, connect_num);
 	cout << "CuckooDuo" << endl;
 
@@ -72,7 +87,12 @@ double test_ck(int cell_number) {
 	return latency;
 }
 
-double test_me(int cell_number) {
+double test_me(int cell_number, bool cacheFlag, int i) {
+	if (cacheFlag)
+		ME::TOTAL_MEMORY_BYTE_USING_CACHE = CACHE_BYTES;
+	else
+		ME::TOTAL_MEMORY_BYTE_USING_CACHE = 0;
+
 	int MapEmbed_layer = 3;
     int MapEmbed_bucket_number = cell_number / 8;
     int MapEmbed_cell_number[3];
@@ -109,7 +129,12 @@ double test_me(int cell_number) {
 
 }
 
-double test_race(int cell_number) {
+double test_race(int cell_number, bool cacheFlag, int i) {
+	if (cacheFlag)
+		RACE::TOTAL_MEMORY_BYTE_USING_CACHE = CACHE_BYTES;
+	else
+		RACE::TOTAL_MEMORY_BYTE_USING_CACHE = 0;
+
 	RACE::RACETable tb(cell_number, 1);
 	cout << "RACE" << endl;
 
@@ -137,7 +162,12 @@ double test_race(int cell_number) {
 	return latency;
 }
 
-double test_tea(int cell_number) {
+double test_tea(int cell_number, bool cacheFlag, int i) {
+	if (cacheFlag)
+		TEA::TOTAL_MEMORY_BYTE_USING_CACHE = CACHE_BYTES;
+	else
+		TEA::TOTAL_MEMORY_BYTE_USING_CACHE = 0;
+
 	TEA::TEATable tb(cell_number, 1000, 1);
 	cout << "TEA" << endl;
 
@@ -168,47 +198,65 @@ double test_tea(int cell_number) {
 int main(int argc, char **argv) {
 	int cell_number, sock;
 
-	string load_path = "ycsb_files/load.txt";
+	string load_path = "ycsb_files_cache/load_workloadd.txt";
+	// string load_path = "ycsb_files/load.txt";
 
-	string run_path;
-	string run_prefix = "ycsb_files/run_";
-	string run_suffix = ".txt";
+	string run_path[4] = {
+		"ycsb_files_cache/run_workloadd_uniform.txt",
+		"ycsb_files_cache/run_workloadd_latest.txt",
+		"ycsb_files_cache/run_workloadd_ycsb_zipf.txt",
+		"ycsb_files_cache/run_workloadd_our_zipf090.txt"
+	};
 
-	string csv_path = "hybrid_single.csv";
+	string csv_path = "test_workloadd.csv";
 
-	/* Test latency with 1 thread on different hybrid wordloads
-	 * Insertion/Query changes from 90/10 to 10/90
-	 */
 	read_ycsb_load(load_path);
-	// load factor: 60%
-	entry.erase(entry.begin()+18000000, entry.end());
+	// if using the full load.txt, can run like below
+	//entry.erase(entry.begin()+entry.size()/2, entry.end());
+	cell_number = entry.size()*2;
 
-	for (int i = 10; i < 100; i += 10) {
-		cout << endl << "Query/Insertion Ratio: " << i << "/" << 100-i << endl;
+	if (rdma_client_init(argc, argv, cell_number) < 0)
+		return 0;
+	sleep(1);
+	sock = set_tcp_client();
+	if (sock <= 0)
+		return 0;
 
-		run_path = run_prefix+to_string(i)+run_suffix;
-		read_ycsb_run(run_path);
+	for (int i = 0; i < 4; ++i)
+		csv_data.push_back({});
+	csv_data[0].distribution = "uniform";
+	csv_data[1].distribution = "latest";
+	csv_data[2].distribution = "zipfian099";
+	csv_data[3].distribution = "zipfian090";
 
-		if (i == 10) {
-			cell_number = entry.size()/6*10;
-			if (rdma_client_init(argc, argv, cell_number) < 0)
-				return 0;
-			sleep(1);
-			sock = set_tcp_client();
-			if (sock <= 0)
-				return 0;
+	for (int i = 0; i < 4; ++i) {
+	
+		if (i == 3) {
+			for (int j = 0; j < entry.size(); ++j) {
+				*(uint64_t*)entry[j].key = j+1;
+				*(uint64_t*)entry[j].val = j+1;
+			}
 		}
 
-		csv_data.push_back({});
-		int j = i/10-1;
-		csv_data[j].ratio = to_string(i)+"/"+to_string(100-i);
-		csv_data[j].ck_latency = test_ck(cell_number);
+		read_ycsb_run(run_path[i]);
+
+		// 0 for no cache, 1 for cache
+		cout << endl << csv_data[i].distribution << endl;
+		csv_data[i].ck_latency[0] = test_ck(cell_number, false, i);
 		send_msg("zero", sock);
-		csv_data[j].me_latency = test_me(cell_number);
+		csv_data[i].ck_latency[1] = test_ck(cell_number, true, i);
 		send_msg("zero", sock);
-		csv_data[j].race_latency = test_race(cell_number);
+		csv_data[i].me_latency[0] = test_me(cell_number, false, i);
 		send_msg("zero", sock);
-		csv_data[j].tea_latency = test_tea(cell_number);
+		csv_data[i].me_latency[1] = test_me(cell_number, true, i);
+		send_msg("zero", sock);
+		csv_data[i].race_latency[0] = test_race(cell_number, false, i);
+		send_msg("zero", sock);
+		csv_data[i].race_latency[1] = test_race(cell_number, true, i);
+		send_msg("zero", sock);
+		csv_data[i].tea_latency[0] = test_tea(cell_number, false, i);
+		send_msg("zero", sock);
+		csv_data[i].tea_latency[1] = test_tea(cell_number, true, i);
 		send_msg("zero", sock);
 
 		//entry.clear();

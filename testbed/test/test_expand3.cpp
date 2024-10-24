@@ -1,9 +1,9 @@
 /* 
- * A test program for CuckooDuo expansion
- * Active (Figure 12(a))
- * Lazy (Figure 12(d))
+ * A test program for MapEmbed expansion
+ * Active (Figure 12(c))
+ * Lazy (Figure 12(e))
  */
-#include "../ycsb_header/ycsb_cuckooduo.h"
+#include "../ycsb_header/ycsb_mapembed.h"
 
 #include <iostream>
 
@@ -32,7 +32,7 @@ void writeCSV(const string& filename) {
         return;
     }
 
-	file << "Size,Copy,Copy&Clean\n";
+	file << "Size,Copy,Copy&Move\n";
 	for (const auto& item : csv_data) {
 		file << item.size << ","
 			 << item.t1 << ","
@@ -49,13 +49,19 @@ int main(int argc, char **argv) {
 	//entry.erase(entry.begin()+6400000, entry.end());
 
 	int cell_number = entry.size()/8;
-	int max_kick_num = 3;
 	int thread_num = 1;
-	int connect_num = 1;
+	int MapEmbed_layer = 3;
+    int MapEmbed_bucket_number = cell_number / 8;
+    int MapEmbed_cell_number[3];
+    MapEmbed_cell_number[0] = MapEmbed_bucket_number * 9 / 2;
+    MapEmbed_cell_number[1] = MapEmbed_bucket_number * 3 / 2;
+    MapEmbed_cell_number[2] = MapEmbed_bucket_number / 2;
+    int MapEmbed_cell_bit = 4;
+
 	rdma_client_init(argc, argv, cell_number);
 	sleep(1);
 
-	CK::CuckooHashTable tb(cell_number, max_kick_num, thread_num, connect_num);
+    ME::MapEmbed tb(MapEmbed_layer, MapEmbed_bucket_number, MapEmbed_cell_number, MapEmbed_cell_bit, thread_num);
 
 	int sock = set_tcp_client();
 	if (sock <= 0) {
@@ -64,15 +70,16 @@ int main(int argc, char **argv) {
 
 	/* Insert 1/8 with load factor at 0.9 at first */
 	int success_cnt = 0;
-	success_cnt = CK::MultiThreadAction(&tb, cell_number/10*9, thread_num, command::INSERT);
+	success_cnt = ME::MultiThreadAction(&tb, cell_number/10*9, thread_num, command::INSERT);
 	entry.erase(entry.begin(), entry.begin()+cell_number/10*9);
+
 	cout << "1/8 inserted" << endl;
 	cout << "load_factor at: " << double(success_cnt)/cell_number << endl;
-
+	
 	pair<long long, long long> t;
 	for (int i = 0; i < 4; ++i) {
 		/* Expand to double once, from 1/8 to 2 */
-		t = tb.expand(2, sock);
+		t = tb.expand3(2, sock);
 		cout << t.first << " " << t.second << endl;
 		char info[32];
 		sprintf(info, "%.2lfM to %.2lfM", ((double)(cell_number<<i))/1000000, ((double)((cell_number<<(i+1)))/1000000));
@@ -86,7 +93,7 @@ int main(int argc, char **argv) {
 		/* Insert with load factor at 0.9 after expansion */
 		if (i < 3) {
 			cout << (1<<(i+1))-(1<<i) << endl;
-			success_cnt += CK::MultiThreadAction(&tb, cell_number*(1<<i)/10*9, thread_num, command::INSERT);
+			success_cnt += ME::MultiThreadAction(&tb, cell_number*(1<<i)/10*9, thread_num, command::INSERT);
 			entry.erase(entry.begin(), entry.begin()+cell_number*(1<<i)/10*9);
 			cout << "1/" << (8>>(i+1)) << " inserted" << endl;
 			cout << "load_factor at: " << double(success_cnt)/(cell_number*(1<<(i+1))) << endl;
@@ -95,7 +102,7 @@ int main(int argc, char **argv) {
 		cout << endl;
 	}
 
-	string csv_path = "test_expand.csv";
+	string csv_path = "test_expand3.csv";
 	writeCSV(csv_path);
 
 	send_msg("over", sock);
