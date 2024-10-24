@@ -141,7 +141,7 @@ server@: ./bin/rdma_server -a remote_IP
 client@: ./bin/test_rtt_insert -a remote_IP
 ```
 
-* Comparison of average latency with prior art (Figure 10(a~d) & Figure 7(e~f))
+* Comparison of average latency with prior art (Figure 10(a~d), Figure 7(e~f))
 ```bash
 server@: ./bin/rdma_server -a remote_IP
 
