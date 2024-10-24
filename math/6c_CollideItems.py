@@ -1,13 +1,13 @@
 import subprocess
 import csv
 
-testResultDir = "4c.csv";
+testResultDir = "6c.csv";
 
 def run_with_bucket_size(bucket_size, fp_len):
-    compile_command = ["g++", f"-D MY_BUCKET_SIZE={bucket_size}", f"-D MY_FP_LEN={fp_len}", "4b_4c_CollideItems.cpp", "-o", "4b_4c_CollideItems"]
+    compile_command = ["g++", f"-D MY_BUCKET_SIZE={bucket_size}", f"-D MY_FP_LEN={fp_len}", "6b_6c_CollideItems.cpp", "-o", "6b_6c_CollideItems"]
     subprocess.run(compile_command, check=True)
     
-    result = subprocess.run(["./4b_4c_CollideItems"], capture_output=True, text=True).stdout.strip()
+    result = subprocess.run(["./6b_6c_CollideItems"], capture_output=True, text=True).stdout.strip()
 
     return result
 
