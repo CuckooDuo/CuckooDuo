@@ -17,7 +17,7 @@ and 9.0∼18.5× smaller insertion bandwidth than prior works.
 
 * `testbed` contains codes of CuckooDuo and the related algorithms implemented in our testbed (built with two servers and one programmalbe swtich connected through RDMA networks).
 
-* `workload` contains several small sample workloads, which can be directly used to run the codes in this project. We also upload all workloads used in our paper to Google Drive and provide [link](https://drive.google.com/file/d/1Y2WI6RYiPiWq6lNlhOusQbZMW1n89sBC/view?usp=share_link) to download them.
+* `workload` contains several small sample workloads, which can be directly used to run the codes in this project. We also upload all workloads used in our paper to Google Drive and provide [link](https://drive.google.com/file/d/1ZUKmtoi40vPkr0qxi1syRrciAjZJrYDu/view?usp=sharing) to download them.
 
 * `CuckooDuo_Supplementary.pdf` contains the supplementary materials of CuckooDuo.
 
