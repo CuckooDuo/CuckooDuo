@@ -162,58 +162,58 @@ void test_all(int insert_number = TEST_SLOTS){
     }
     cout << "Cuckoo Done" << endl;
 // /******************************* create RACE ********************************/
-    // insertFailFlag = 0;
-    // SEF::Dictionary race_dict([]() -> SEF::BaseSegment* {
-    //     return new RaceSegment();
-    // });
+    insertFailFlag = 0;
+    SEF::Dictionary race_dict([]() -> SEF::BaseSegment* {
+        return new RaceSegment();
+    });
 
-    // for(int step = 0; step < LFstepSum; step++){
-    //     auto start = std::chrono::high_resolution_clock::now();
-    //     for(i = LFstep[step]; i < LFstep[step+1]; ++i){
-    //         SEF::Entry tmp_entry;
-    //         memcpy(tmp_entry.key, entry[i].key, sizeof(tmp_entry.key));
-    //         memcpy(tmp_entry.val, entry[i].val, sizeof(tmp_entry.val));
-    //         if(race_dict.insert(tmp_entry, i) == false){
-    //             insertFailFlag = 1;
-    //             break;
-    //         }
-    //     }
-    //     auto end = std::chrono::high_resolution_clock::now();
-    //     chrono::duration<double> diff = end - start;
-    //     cout << "Time taken by RACE Step " << step << " : " << diff.count() << " seconds" << endl;
-    //     total_time[1][step] = diff.count();
-    //     if (insertFailFlag) break;
-    //     totalRound[1][step]++;
-    //     LF[1][step] += race_dict.load_factor();
-    // }
-    // cout << "RACE Done" << endl;
-    // return;
+    for(int step = 0; step < LFstepSum; step++){
+        auto start = std::chrono::high_resolution_clock::now();
+        for(i = LFstep[step]; i < LFstep[step+1]; ++i){
+            SEF::Entry tmp_entry;
+            memcpy(tmp_entry.key, entry[i].key, sizeof(tmp_entry.key));
+            memcpy(tmp_entry.val, entry[i].val, sizeof(tmp_entry.val));
+            if(race_dict.insert(tmp_entry, i) == false){
+                insertFailFlag = 1;
+                break;
+            }
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+        chrono::duration<double> diff = end - start;
+        cout << "Time taken by RACE Step " << step << " : " << diff.count() << " seconds" << endl;
+        total_time[1][step] = diff.count();
+        if (insertFailFlag) break;
+        totalRound[1][step]++;
+        LF[1][step] += race_dict.load_factor();
+    }
+    cout << "RACE Done" << endl;
+    return;
 /******************************* create LinearProbingHash ********************************/
-    // insertFailFlag = 0;
-    // SEF::Dictionary lph_dict([]() -> SEF::BaseSegment* {
-    //     return new LPHSegment();
-    // });
-    // for(int step = 0; step < LFstepSum; step++){
-    //     auto start = std::chrono::high_resolution_clock::now();
-    //     for(i = LFstep[step]; i < LFstep[step+1]; ++i){
-    //         SEF::Entry tmp_entry;
-    //         memcpy(tmp_entry.key, entry[i].key, sizeof(tmp_entry.key));
-    //         memcpy(tmp_entry.val, entry[i].val, sizeof(tmp_entry.val));
-    //         if(lph_dict.insert(tmp_entry, i) == false){
-    //             insertFailFlag = 1;
-    //             break;
-    //         }
-    //     }
-    //     auto end = std::chrono::high_resolution_clock::now();
-    //     chrono::duration<double> diff = end - start;
-    //     cout << "Time taken by Cuckoo Single Step " << step << " : " << diff.count() << " seconds" << endl;
-    //     total_time[1][step] = diff.count();
-    //     if (insertFailFlag) break;
-    //     totalRound[1][step]++;
-    //     LF[1][step] += lph_dict.load_factor();
-    //     bpk[1][step] += lph_dict.bit_per_key();
-    // }
-    // cout << "Linear Probing Hash Done" << endl;
+    insertFailFlag = 0;
+    SEF::Dictionary lph_dict([]() -> SEF::BaseSegment* {
+        return new LPHSegment();
+    });
+    for(int step = 0; step < LFstepSum; step++){
+        auto start = std::chrono::high_resolution_clock::now();
+        for(i = LFstep[step]; i < LFstep[step+1]; ++i){
+            SEF::Entry tmp_entry;
+            memcpy(tmp_entry.key, entry[i].key, sizeof(tmp_entry.key));
+            memcpy(tmp_entry.val, entry[i].val, sizeof(tmp_entry.val));
+            if(lph_dict.insert(tmp_entry, i) == false){
+                insertFailFlag = 1;
+                break;
+            }
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+        chrono::duration<double> diff = end - start;
+        cout << "Time taken by Cuckoo Single Step " << step << " : " << diff.count() << " seconds" << endl;
+        total_time[2][step] = diff.count();
+        if (insertFailFlag) break;
+        totalRound[2][step]++;
+        LF[2][step] += lph_dict.load_factor();
+        bpk[2][step] += lph_dict.bit_per_key();
+    }
+    cout << "Linear Probing Hash Done" << endl;
 }
 
 int main(int argc, char *argv[])
@@ -236,19 +236,19 @@ int main(int argc, char *argv[])
     {
         test_all(TEST_SLOTS);
     }
-    for (int i=0; i<2; i++)
+    for (int i=0; i<3; i++)
         for (int j = 0; j < 100; j++){
             LF[i][j] = LF[i][j] / totalRound[i][j];
             bpk[i][j] = bpk[i][j] / totalRound[i][j];
         }
     cout << "LF:\n";
-    for (int i=0; i<2; i++){
+    for (int i=0; i<3; i++){
         for (int j = 0; j < 100; j++) 
             cout << LF[i][j] << ",\t";
         cout << endl;
     }
     cout << "bpk:\n";
-    for (int i=0; i<2; i++){
+    for (int i=0; i<3; i++){
         for (int j = 0; j < 100; j++) 
             cout << bpk[i][j] << ",\t";
         cout << endl;
