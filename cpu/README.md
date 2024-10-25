@@ -187,3 +187,11 @@ By running the following commands, you can automatically reproduce the results i
    g++ ours_vs_cceh_bpk.cpp -o main -D SIG_BIT=16
    ./main
    ```
+
+6. **BPK and Load Factor: CuckooDuo vs Competitors by Table Size (Figure 12(f~g))**
+
+   To generate experimental data comparing BPK and load factor for CuckooDuo (ours) and other competing algorithms as the unit table size varies, execute:
+
+   ```bash
+   ./ours_vs_race.sh
+   ```
