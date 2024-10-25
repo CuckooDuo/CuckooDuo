@@ -195,3 +195,19 @@ By running the following commands, you can automatically reproduce the results i
    ```bash
    ./ours_vs_race.sh
    ```
+
+7. **Load Factor vs Local Latency (Figure 7(e~f))**
+
+   To obtain the local insert latency and lookup latency of CuckooDuo at different load factor, used to compare with RDMA latency:
+
+   ```bash
+   ./LocalLatency.sh
+   ```
+
+8. **Stash Size vs Load Factor (Figure 7(j))**
+
+   For a comparsion of load factor among CuckooDuo with different stash size:
+
+   ```bash
+   ./LF_vs_StashSize.sh
+   ```
