@@ -1444,7 +1444,7 @@ public:
             }
 
             table[TABLE2].bucket[h2].sig[cell] = 0;
-            setFull(table[TABLE1].bucket[h1].full, cell, 0);
+            setFull(table[TABLE2].bucket[h2].full, cell, 0);
 
 			bucket_unlock(TABLE2, h2, true);
             --elecnt;
