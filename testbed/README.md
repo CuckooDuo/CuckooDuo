@@ -28,7 +28,7 @@ We also implement the other three algorithms in our testbed: MapEmbed, RACE, and
 * `test_latency.cpp`: Test program for latency at different load factor
 * `test_large_latency.cpp`: Test program for latency at different load factor on large-scale workloads
 * `test_multi.cpp`: Test program for throughput with different thread number
-* `test_multi_insert.cpp`: Test program for insert throughput with 16 threads at different load factor
+* `test_multi_lf.cpp`: Test program for throughput with 16 threads at different load factor
 * `test_large_multi.cpp`: Test program for throughput with different thread number on large-scale workloads
 * `test_hybrid_single.cpp`: Test program for latency on hybrid workloads with single thread
 * `test_hybrid_multi.cpp`: Test program for throughput on hybrid workloads with multiple thread
@@ -162,11 +162,11 @@ server@: ./bin/rdma_server -a remote_IP
 client@: ./bin/test_partial_query -a remote_IP
 ```
 
-* Comparison of insert throughput in 16 threads with prior art (Figure 10(g))
+* Comparison of throughput in 16 threads with prior art (Figure 10(g))
 ```bash
 server@: ./bin/rdma_server -a remote_IP -n 16
 
-client@: ./bin/test_multi_insert -a remote_IP -n 16
+client@: ./bin/test_multi_lf -a remote_IP -n 16
 ```
 
 *  Comparison of average throughput with prior art. (Figure 10(h~k))
