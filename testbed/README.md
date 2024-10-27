@@ -49,6 +49,8 @@ We also implement the other three algorithms in our testbed: MapEmbed, RACE, and
 * `test_rtt_insert.cpp`: Test program for insert rtts at different load factor
 * `test_workloada.cpp`: Test program for latency on YCSB-A workloads (50% Lookup & 50% Update)
 * `test_workloadd.cpp`: Test program for latency on YCSB-D workloads (95% Insert & 5% Lookup)
+* `test_largeKV_latency.cpp`: Test program for latency at different load factor with large KV
+* `test_largeKV_mops.cpp`: Test program for throughput with 16 threads at different load factor with large KV
 
 ### ycsb_header: 
 * `ycsb_read.h`: Definions and tools for work with YCSB
