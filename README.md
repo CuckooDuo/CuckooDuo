@@ -18,6 +18,6 @@ Perfect hashing is a special hashing function that maps each item to a unique lo
 
 * `workload` contains several small sample workloads, which can be directly used to run the codes in this project. We also upload all workloads used in our paper to Google Drive and provide [link](https://drive.google.com/file/d/1ZUKmtoi40vPkr0qxi1syRrciAjZJrYDu/view?usp=sharing) to download them.
 
-* `CuckooDuo_Supplementary.pdf` contains the supplementary materials of CuckooDuo.
+* [`CuckooDuo_Supplementary.pdf`](https://github.com/CuckooDuo/CuckooDuo/blob/main/CuckooDuo_Supplementary.pdf) contains the supplementary materials of CuckooDuo.
 
 * More details can be found in the folders.
