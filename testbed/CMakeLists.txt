@@ -60,3 +60,6 @@ add_executable(test_rtt_insert ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/te
 
 add_executable(test_large_latency ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_large_latency.cpp)
 add_executable(test_large_multi ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_large_multi.cpp)
+
+add_executable(test_largeKV_latency ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_largeKV_latency.cpp)
+add_executable(test_largeKV_mops ${RDMA_SOURCE_DIR}/rdma_common.cpp ${TEST_DIR}/test_largeKV_mops.cpp)
