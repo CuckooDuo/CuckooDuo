@@ -17,10 +17,15 @@ We also implement the other three algorithms in our testbed: MapEmbed, RACE, and
 * `tea.h`: Implementation of TEA algorithm with RDMA
 * `cuckooduo_large.h`: Implementation of CuckooDuo algorithm with RDMA for large table
 * `cuckooduo_siglen.h`: Implementation of CuckooDuo algorithm with RDMA and changeable length of fingerprint
+* `cuckooduo_largeKV.h`: Implementation of CuckooDuo algorithm with RDMA and large length of KV
+* `mapembed_largeKV.h`: Implementation of MapEmbed algorithm with RDMA and large length of KV
+* `race_largeKV.h`: Implementation of RACE algorithm with RDMA and large length of KV
+* `tea_largeKV.h`: Implementation of TEA algorithm with RDMA and large length of KV
 
 ### rdma: 
 * `rdma_common.h/cpp`: The common RDMA routines used in the server/client program
 * `rdma_client.h`: RDMA client side code for CuckooDuo
+* `rdma_client_largeKV.h`: RDMA client side code for CuckooDuo with simulation of large KV length
 * `rdma_server.h`: RDMA server side code for CuckooDuo
 * `rdma_server.cpp`: An implement of RDMA server on remote node
 
@@ -50,9 +55,13 @@ We also implement the other three algorithms in our testbed: MapEmbed, RACE, and
 * `ycsb_cuckooduo.h`: Functions to work with YCSB datasets on CuckooDuo
 * `ycsb_cuckooduo_large.h`: Functions to work with YCSB datasets on CuckooDuo with large table
 * `ycsb_cuckooduo_siglen.h`: Functions to work with YCSB datasets on CuckooDuo with changeable length of fingerprint
+* `ycsb_cuckooduo_largeKV.h`: Functions to work with YCSB datasets on CuckooDuo with large KV
 * `ycsb_mapembed.h`: Functions to work with YCSB datasets on MapEmbed
+* `ycsb_mapembed_largeKV.h`: Functions to work with YCSB datasets on MapEmbed with large KV
 * `ycsb_race.h`: Functions to work with YCSB datasets on RACE
+* `ycsb_race_largeKV.h`: Functions to work with YCSB datasets on RACE with large KV
 * `ycsb_tea.h`: Functions to work with YCSB datasets on TEA
+* `ycsb_tea_largeKV.h`: Functions to work with YCSB datasets on TEA with large KV
 
 ### others:
 * `CMakeLists.txt`: Helper to build programs with cmake tools
@@ -118,7 +127,7 @@ Below we show some examples of running tests. And `server@` means to execute com
 
 The results will stored in csv files described by `csv_path` in corresponding cpp files.
 
-You can also get more details of each test in corresponding cpp files, and modify test by yourself.
+You can also get more details of each test in corresponding cpp files, and modify test by yourself. E.g, you can change `ycsb_xx.h` to `ycsb_xx_largeKV.h` in any test cpp, and modify `RDMA_KEY_LEN` and `RDMA_VAL_LEN` in `rdma_client_largeKV.h`, to generate simulated tests supporting any KV length you define (even though your remote memory might not be large enough).
 
 * Comparison of query latency with different stash sizes (Figure 7(k))
 ```bash
@@ -240,9 +249,23 @@ server@: ./bin/rdma_server -a remote_IP
 client@: ./bin/test_large_latency -a remote_IP
 ```
 
-* Comparison of throughput on CuckooDuo on large-scalse workloads (Figure 6(b) in Supplementary Materials)
+* Comparison of latency of CuckooDuo on large-scalse workloads (Figure 6(a) in Supplementary Materials)
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_large_latency -a remote_IP
+```
+
+* Comparison of latency with KV_LEN=2048 with prior art (Figure 8(a~d) in Supplementary Materials)
+```bash
+server@: ./bin/rdma_server -a remote_IP
+
+client@: ./bin/test_largeKV_latency -a remote_IP
+```
+
+* Comparison of throughput with KV_LEN=2048 in 16 threads with prior art (Figure 8(e~h) in Supplementary Materials)
 ```bash
 server@: ./bin/rdma_server -a remote_IP -n 16
 
-client@: ./bin/test_large_multi -a remote_IP -n 16
+client@: ./bin/test_largeKV_mops -a remote_IP -n 16
 ```
