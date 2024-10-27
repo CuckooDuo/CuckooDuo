@@ -1,13 +1,12 @@
-# CuckooDuo: Extendible RDMA-based Remote Memory KV Store with Dynamic Perfect Hashing Index
+# Extendible RDMA-based Remote Memory KV Store with Dynamic Perfect Hashing Index
 
 This repository contains all related code of our paper "Extendible RDMA-based Remote Memory KV Store with Dynamic Perfect Hashing Index". 
 
-**Our codes can automatically reproduce all experimental results (figures) in our paper.**
+**Our codes can reproduce all experimental results (figures) in our paper.**
 
 ## Introduction
 
-Perfect hashing is a special hashing function that maps each item to one unique location without collision, which enables the creation of a KV store with small and constant lookup time. This paper proposes a novel dynamic perfect hashing index without sacrificing associativity, and uses it to devise an RDMA-based remote memory KV store called CuckooDuo. CuckooDuo simultaneously achieves high load factor, fast speed, minimal bandwidth, and efficient expansion without item movement. We theoretically analyze the properties of CuckooDuo, and implement it in an RDMA-network based testbed. The results show CuckooDuo achieves 1.9∼6.2× smaller insertion latency
-and 9.0∼18.5× smaller insertion bandwidth than prior works.
+Perfect hashing is a special hashing function that maps each item to a unique location without collision, which enables the creation of a KV store with small and constant lookup time. Recent dynamic perfect hashing attains high load factor by increasing associativity, which impacts bandwidth and throughput. This paper proposes a novel dynamic perfect hashing index without sacrificing associativity, and uses it to devise an RDMA-based remote memory KV store called CuckooDuo. CuckooDuo simultaneously achieves high load factor, fast speed, minimal bandwidth, and efficient expansion without item movement. We theoretically analyze the properties of CuckooDuo, and implement it in an RDMA-network based testbed. The results show CuckooDuo achieves 1.9∼17.6× smaller insertion latency and 9.0∼18.5× smaller insertion bandwidth than prior works.
 
 ## About this repository
 
