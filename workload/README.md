@@ -2,7 +2,7 @@
 
 ## Overview
 
-We use YCSB [[1]](#md-ref-1) to reate a loading workload with 30M distinct insert requests, which is used to load the KV-table to different load factors. We create multiple 300K running workloads with insert/lookup/update/delete (or hybrid) requests, which are used for performance evaluation at different load factors. By default, the lookup/update requests in the running workloads follow default Zipfian distribution of θ = 0.99. The running workloads contain only legal requests, meaning they will not lookup/update/delete non-existent keys, nor insert existent keys. Some experiments also use running workloads with different ratios of illegal requests (Figure 11), or various request modes and distributions (Table III).  
+We use YCSB [[1]](#md-ref-1) to create a loading workload with 30M distinct insert requests, which is used to load the KV-table to different load factors. We create multiple 300K running workloads with insert/lookup/update/delete (or hybrid) requests, which are used for performance evaluation at different load factors. By default, the lookup/update requests in the running workloads follow default Zipfian distribution of θ = 0.99. The running workloads contain only legal requests, meaning they will not lookup/update/delete non-existent keys, nor insert existent keys. Some experiments also use running workloads with different ratios of illegal requests (Figure 11), or various request modes and distributions (Table III).  
 
 All the YCSB workloads used in our paper can be found in the following [link](https://drive.google.com/file/d/1ZUKmtoi40vPkr0qxi1syRrciAjZJrYDu/view?usp=sharing). 
 
