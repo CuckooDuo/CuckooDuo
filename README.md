@@ -2,7 +2,7 @@
 
 This repository contains all related code of our paper "Extendible RDMA-based Remote Memory KV Store with Dynamic Perfect Hashing Index". 
 
-**Our codes can reproduce all experimental results (figures) in our paper.**
+**We provide detailed instructions to reproduce each figure in our paper (and supplementary materials).** More details can be found in the folders.
 
 ## Introduction
 
