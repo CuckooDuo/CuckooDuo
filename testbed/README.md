@@ -251,11 +251,11 @@ server@: ./bin/rdma_server -a remote_IP
 client@: ./bin/test_large_latency -a remote_IP
 ```
 
-* Comparison of latency of CuckooDuo on large-scalse workloads (Figure 6(a) in Supplementary Materials)
+* Comparison of throughput of CuckooDuo on large-scalse workloads (Figure 6(b) in Supplementary Materials)
 ```bash
-server@: ./bin/rdma_server -a remote_IP
+server@: ./bin/rdma_server -a remote_IP -n 16
 
-client@: ./bin/test_large_latency -a remote_IP
+client@: ./bin/test_large_multi -a remote_IP -n 16
 ```
 
 * Comparison of latency with KV_LEN=2048 with prior art (Figure 8(a~d) in Supplementary Materials)
